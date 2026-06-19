@@ -35,3 +35,6 @@ difference — not something to paper over by widening tolerance.
 Conformance tests are tagged `:conformance` and excluded by default. Run with:
 
     mise exec -- mix test --include conformance
+
+Requires **Erlang/OTP 27+** (the test parses `expected.json` with the built-in
+`:json` module) and the optional `:vix` dependency (to decode the PNG fixtures).

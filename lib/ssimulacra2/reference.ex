@@ -37,5 +37,4 @@ defmodule Ssimulacra2.Reference do
 
   defp map_native({:ok, value}), do: {:ok, value}
   defp map_native({:error, message}) when is_binary(message), do: {:error, {:ssimulacra2, message}}
-  defp map_native(other), do: {:ok, other}
 end

@@ -47,6 +47,13 @@ This writes `checksum-Elixir.Ssimulacra2.Native.exs`, which MUST be included in
 the published package (it is already listed in `mix.exs` `:files`). Without it,
 precompiled NIF loading fails for consumers.
 
+### Building from source
+
+A Rust toolchain is only needed if you build the NIF locally instead of using a
+precompiled artifact — i.e. on a target not covered by the release matrix, or
+when forcing a build with `SSIMULACRA2_BUILD=1`. In that case `fast-ssim2`
+requires **Rust ≥ 1.89** (the crate pins that MSRV).
+
 ## License
 
 This wrapper is released under BSD-2-Clause, matching `fast-ssim2`.

@@ -18,3 +18,11 @@ jobs:
           SSIMULACRA2_BUILD: "1"
       - name: Test
         run: mise exec -- mix test
+      # The optional Vix helper is excluded by default; exercise it explicitly so
+      # an upstream Vix/libvips API change can't regress it unnoticed.
+      - name: Install libvips (for the optional Vix path)
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev
+      - name: Test (incl. Vix)
+        run: mise exec -- mix test --include vix
+        env:
+          SSIMULACRA2_BUILD: "1"
