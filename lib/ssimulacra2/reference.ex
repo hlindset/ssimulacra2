@@ -10,35 +10,43 @@ defmodule Ssimulacra2.Reference do
 
   alias Ssimulacra2.{Native, Validate}
 
-  @enforce_keys [:resource, :width, :height]
-  defstruct [:resource, :width, :height]
+  @enforce_keys [:resource, :width, :height, :format]
+  defstruct [:resource, :width, :height, :format]
 
-  @type t :: %__MODULE__{resource: reference(), width: pos_integer(), height: pos_integer()}
+  @type t :: %__MODULE__{
+          resource: reference(),
+          width: pos_integer(),
+          height: pos_integer(),
+          format: atom()
+        }
 
-  @doc "Precompute a reference from a packed RGB888 binary."
-  @spec new(binary(), pos_integer(), pos_integer()) ::
+  @doc "Precompute a reference from a packed binary of the given format (default :rgb888)."
+  @spec new(binary(), pos_integer(), pos_integer(), keyword()) ::
           {:ok, t()} | {:error, Ssimulacra2.reason()}
-  def new(source, width, height) when is_binary(source) do
-    with :ok <- Validate.dims(width, height),
-         :ok <- Validate.size(source, width, height, :rgb888),
-         {:ok, resource} <- map_native(Native.reference_new(source, width, height, :rgb888)) do
-      {:ok, %__MODULE__{resource: resource, width: width, height: height}}
+  def new(source, width, height, opts \\ []) when is_binary(source) do
+    format = Keyword.get(opts, :format, :rgb888)
+
+    with :ok <- Validate.format(format),
+         :ok <- Validate.dims(width, height),
+         :ok <- Validate.size(source, width, height, format),
+         {:ok, resource} <- map_native(Native.reference_new(source, width, height, format)) do
+      {:ok, %__MODULE__{resource: resource, width: width, height: height, format: format}}
     end
   end
 
-  @doc "Compare a candidate RGB888 binary against the precomputed reference."
+  @doc "Compare a candidate against the precomputed reference (same format as the reference)."
   @spec compare(t(), binary()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
-    with :ok <- Validate.size(distorted, ref.width, ref.height, :rgb888) do
-      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, :rgb888)
+    with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format) do
+      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format)
       |> map_native()
     end
   end
 
-  @doc "Like `new/3` but returns the reference or raises `Ssimulacra2.Error`."
-  @spec new!(binary(), pos_integer(), pos_integer()) :: t()
-  def new!(source, width, height) do
-    case new(source, width, height) do
+  @doc "Like `new/4` but returns the reference or raises `Ssimulacra2.Error`."
+  @spec new!(binary(), pos_integer(), pos_integer(), keyword()) :: t()
+  def new!(source, width, height, opts \\ []) do
+    case new(source, width, height, opts) do
       {:ok, ref} -> ref
       {:error, reason} -> raise Ssimulacra2.Error, reason: reason
     end
