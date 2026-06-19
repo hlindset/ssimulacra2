@@ -9,7 +9,7 @@ defmodule Ssimulacra2 do
   large perceptual differences.
   """
 
-  alias Ssimulacra2.Native
+  alias Ssimulacra2.{Native, Validate}
 
   @type rgb888 :: binary()
   @type reason ::
@@ -24,24 +24,12 @@ defmodule Ssimulacra2 do
           {:ok, float()} | {:error, reason()}
   def compare(reference, distorted, width, height)
       when is_binary(reference) and is_binary(distorted) do
-    with :ok <- validate_dims(width, height),
-         :ok <- validate_size(reference, width, height),
-         :ok <- validate_size(distorted, width, height) do
+    with :ok <- Validate.dims(width, height),
+         :ok <- Validate.size(reference, width, height),
+         :ok <- Validate.size(distorted, width, height) do
       Native.compare(reference, distorted, width, height)
       |> map_native_error()
     end
-  end
-
-  @doc false
-  def validate_dims(width, height)
-      when is_integer(width) and is_integer(height) and width > 0 and height > 0,
-      do: :ok
-
-  def validate_dims(_, _), do: {:error, :invalid_dimensions}
-
-  @doc false
-  def validate_size(bin, width, height) do
-    if byte_size(bin) == width * height * 3, do: :ok, else: {:error, :size_mismatch}
   end
 
   @doc """

@@ -8,7 +8,7 @@ defmodule Ssimulacra2.Reference do
   ideal for a quality-search loop comparing many encodings against one original.
   """
 
-  alias Ssimulacra2.Native
+  alias Ssimulacra2.{Native, Validate}
 
   @enforce_keys [:resource, :width, :height]
   defstruct [:resource, :width, :height]
@@ -19,8 +19,8 @@ defmodule Ssimulacra2.Reference do
   @spec new(binary(), pos_integer(), pos_integer()) ::
           {:ok, t()} | {:error, Ssimulacra2.reason()}
   def new(source, width, height) when is_binary(source) do
-    with :ok <- Ssimulacra2.validate_dims(width, height),
-         :ok <- Ssimulacra2.validate_size(source, width, height),
+    with :ok <- Validate.dims(width, height),
+         :ok <- Validate.size(source, width, height),
          {:ok, resource} <- map_native(Native.reference_new(source, width, height)) do
       {:ok, %__MODULE__{resource: resource, width: width, height: height}}
     end
@@ -29,7 +29,7 @@ defmodule Ssimulacra2.Reference do
   @doc "Compare a candidate RGB888 binary against the precomputed reference."
   @spec compare(t(), binary()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
-    with :ok <- Ssimulacra2.validate_size(distorted, ref.width, ref.height) do
+    with :ok <- Validate.size(distorted, ref.width, ref.height) do
       Native.reference_compare(ref.resource, distorted, ref.width, ref.height)
       |> map_native()
     end
