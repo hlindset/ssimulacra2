@@ -35,6 +35,24 @@ defmodule Ssimulacra2.Reference do
     end
   end
 
+  @doc "Like `new/3` but returns the reference or raises `Ssimulacra2.Error`."
+  @spec new!(binary(), pos_integer(), pos_integer()) :: t()
+  def new!(source, width, height) do
+    case new(source, width, height) do
+      {:ok, ref} -> ref
+      {:error, reason} -> raise Ssimulacra2.Error, reason: reason
+    end
+  end
+
+  @doc "Like `compare/2` but returns the bare score or raises `Ssimulacra2.Error`."
+  @spec compare!(t(), binary()) :: float()
+  def compare!(%__MODULE__{} = ref, distorted) do
+    case compare(ref, distorted) do
+      {:ok, score} -> score
+      {:error, reason} -> raise Ssimulacra2.Error, reason: reason
+    end
+  end
+
   defp map_native({:ok, value}), do: {:ok, value}
   defp map_native({:error, message}) when is_binary(message), do: {:error, {:ssimulacra2, message}}
 end
