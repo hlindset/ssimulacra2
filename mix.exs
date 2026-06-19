@@ -5,9 +5,14 @@ defmodule Ssimulacra2.MixProject do
     [
       app: :ssimulacra2,
       version: "0.1.0",
-      elixir: "~> 1.20",
+      elixir: "~> 1.17",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      description: "SSIMULACRA2 perceptual image-quality metric for Elixir (fast-ssim2 NIF)",
+      package: package(),
+      name: "Ssimulacra2",
+      source_url: "https://github.com/hlindset/ssimulacra2"
     ]
   end
 
@@ -17,6 +22,12 @@ defmodule Ssimulacra2.MixProject do
       extra_applications: [:logger]
     ]
   end
+
+  defp elixirc_paths(:test), do: ["lib", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
+
+  # Filled in fully in a later task (Task 9). Placeholder so project/0 compiles now.
+  defp package, do: []
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
