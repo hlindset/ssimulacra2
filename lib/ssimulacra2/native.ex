@@ -25,4 +25,10 @@ defmodule Ssimulacra2.Native do
 
   def compare(_reference, _distorted, _width, _height),
     do: :erlang.nif_error(:nif_not_loaded)
+
+  def reference_new(_source, _width, _height),
+    do: :erlang.nif_error(:nif_not_loaded)
+
+  def reference_compare(_reference, _distorted, _width, _height),
+    do: :erlang.nif_error(:nif_not_loaded)
 end
