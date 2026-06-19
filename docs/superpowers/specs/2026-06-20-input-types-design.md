@@ -106,8 +106,9 @@ Per new format (`:rgb16`, `:linear_rgb`, `:gray8`, `:linear_gray`):
 
 - Size validation: correct size ⇒ `:ok`; wrong size ⇒ `:size_mismatch`.
 - Identical reference vs distorted ⇒ score `100.0` (within float tolerance).
-- A known degradation scores below 100 and is monotonic (larger perturbation ⇒
-  lower score).
+- A clearly different image scores below the identical score. (Metric
+  monotonicity is `fast-ssim2`'s responsibility, not the wrapper's — the
+  per-format tests verify the FFI plumbing, not the metric curve.)
 - `Reference.new` + `Reference.compare` equals one-shot `compare` for the same
   inputs/format.
 - `Reference.compare` with a candidate of the wrong size ⇒ `:size_mismatch`.

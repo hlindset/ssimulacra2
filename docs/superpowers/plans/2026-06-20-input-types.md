@@ -535,15 +535,29 @@ git commit -m "feat: format option for Ssimulacra2.compare"
 Append these tests to `test/ssimulacra2/reference_test.exs`, inside the module (before the final `end`):
 
 ```elixir
-  test "new/4 + compare/2 matches one-shot compare for :rgb16" do
-    ref_img = Fixtures.gradient_rgb16(64, 64)
-    cand = Fixtures.solid_rgb16(64, 64, {40_000, 20_000, 10_000})
+  # {format, reference binary, a different candidate binary}
+  @parity_cases [
+    {:rgb16, Fixtures.gradient_rgb16(64, 64),
+     Fixtures.solid_rgb16(64, 64, {40_000, 20_000, 10_000})},
+    {:linear_rgb, Fixtures.gradient_linear_rgb(64, 64),
+     Fixtures.solid_linear_rgb(64, 64, 0.5)},
+    {:gray8, Fixtures.gradient_gray8(64, 64), Fixtures.solid_gray8(64, 64, 128)},
+    {:linear_gray, Fixtures.gradient_linear_gray(64, 64),
+     Fixtures.solid_linear_gray(64, 64, 0.5)}
+  ]
 
-    {:ok, oneshot} = Ssimulacra2.compare(ref_img, cand, 64, 64, format: :rgb16)
-    {:ok, ref} = Reference.new(ref_img, 64, 64, format: :rgb16)
-    {:ok, batch} = Reference.compare(ref, cand)
+  for {fmt, ref_img, cand} <- @parity_cases do
+    @fmt fmt
+    @ref_img ref_img
+    @cand cand
 
-    assert_in_delta oneshot, batch, 1.0e-4
+    test "new/4 + compare/2 matches one-shot compare for #{fmt}" do
+      {:ok, oneshot} = Ssimulacra2.compare(@ref_img, @cand, 64, 64, format: @fmt)
+      {:ok, ref} = Reference.new(@ref_img, 64, 64, format: @fmt)
+      {:ok, batch} = Reference.compare(ref, @cand)
+
+      assert_in_delta oneshot, batch, 1.0e-4
+    end
   end
 
   test "compare/2 validates the candidate against the reference's stored format" do
