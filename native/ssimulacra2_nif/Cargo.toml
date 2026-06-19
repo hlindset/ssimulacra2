@@ -10,6 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustler = "0.38.0"
-fast-ssim2 = "0.8.2"
+fast-ssim2 = { version = "0.8.2", features = ["imgref"] }
 imgref = "1"
 bytemuck = "1"

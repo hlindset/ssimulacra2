@@ -24,4 +24,20 @@ defmodule Ssimulacra2Test do
       assert {:error, :size_mismatch} = Ssimulacra2.compare(good, bad, 4, 4)
     end
   end
+
+  describe "compare/4 scoring" do
+    test "identical images score ~100" do
+      img = Fixtures.gradient(64, 64)
+      assert {:ok, score} = Ssimulacra2.compare(img, img, 64, 64)
+      assert score > 99.0
+    end
+
+    test "different images score below identical" do
+      a = Fixtures.gradient(64, 64)
+      b = Fixtures.solid(64, 64, {128, 128, 128})
+      assert {:ok, identical} = Ssimulacra2.compare(a, a, 64, 64)
+      assert {:ok, different} = Ssimulacra2.compare(a, b, 64, 64)
+      assert different < identical
+    end
+  end
 end
