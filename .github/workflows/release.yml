@@ -1,0 +1,33 @@
+name: Build precompiled NIFs
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build_release:
+    name: NIF ${{ matrix.nif }} - ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        nif: ["2.17", "2.16", "2.15"]
+        job:
+          - { target: aarch64-apple-darwin, os: macos-14 }
+          - { target: x86_64-apple-darwin, os: macos-13 }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04, use-cross: true }
+          - { target: x86_64-unknown-linux-musl, os: ubuntu-22.04, use-cross: true }
+          - { target: aarch64-unknown-linux-musl, os: ubuntu-22.04, use-cross: true }
+          - { target: x86_64-pc-windows-msvc, os: windows-2022 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: philss/rustler-precompiled-action@v1.1.5
+        with:
+          project-name: ssimulacra2_nif
+          project-version: ${{ github.ref_name }}
+          target: ${{ matrix.job.target }}
+          nif-version: ${{ matrix.nif }}
+          use-cross: ${{ matrix.job.use-cross }}
+          project-dir: "native/ssimulacra2_nif"
