@@ -21,7 +21,7 @@ defmodule Ssimulacra2.Reference do
   def new(source, width, height) when is_binary(source) do
     with :ok <- Validate.dims(width, height),
          :ok <- Validate.size(source, width, height),
-         {:ok, resource} <- map_native(Native.reference_new(source, width, height)) do
+         {:ok, resource} <- map_native(Native.reference_new(source, width, height, :rgb888)) do
       {:ok, %__MODULE__{resource: resource, width: width, height: height}}
     end
   end
@@ -30,7 +30,7 @@ defmodule Ssimulacra2.Reference do
   @spec compare(t(), binary()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
     with :ok <- Validate.size(distorted, ref.width, ref.height) do
-      Native.reference_compare(ref.resource, distorted, ref.width, ref.height)
+      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, :rgb888)
       |> map_native()
     end
   end

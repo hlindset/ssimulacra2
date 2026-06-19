@@ -27,7 +27,7 @@ defmodule Ssimulacra2 do
     with :ok <- Validate.dims(width, height),
          :ok <- Validate.size(reference, width, height),
          :ok <- Validate.size(distorted, width, height) do
-      Native.compare(reference, distorted, width, height)
+      Native.compare(reference, distorted, width, height, :rgb888)
       |> map_native_error()
     end
   end
