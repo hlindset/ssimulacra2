@@ -3,10 +3,26 @@ defmodule Ssimulacra2 do
   SSIMULACRA2 perceptual image-quality metric for Elixir, backed by the
   `fast-ssim2` Rust crate.
 
-  Inputs are packed 8-bit sRGB `RGB888` binaries (`byte_size == width * height * 3`).
-  The returned score is the native SSIMULACRA2 value on a 0–100 scale: 100 is
-  pixel-identical, ~90+ is visually lossless, and low/negative values indicate
-  large perceptual differences.
+  Inputs are packed binaries whose layout is chosen with the `:format` option
+  (default `:rgb888`). The score is on the native SSIMULACRA2 0–100 scale: 100
+  is pixel-identical, ~90+ is visually lossless, and low/negative values
+  indicate large perceptual differences.
+
+  ## Formats
+
+  | format | element | channels | bytes/pixel | color space |
+  | --- | --- | --- | --- | --- |
+  | `:rgb888` (default) | `u8` | 3 | 3 | sRGB (gamma) |
+  | `:rgb16` | `u16` | 3 | 6 | sRGB (gamma) |
+  | `:linear_rgb` | `f32` | 3 | 12 | linear RGB |
+  | `:gray8` | `u8` | 1 | 1 | sRGB grayscale |
+  | `:linear_gray` | `f32` | 1 | 4 | linear grayscale |
+
+  Convention: integer elements are sRGB (gamma-encoded); float elements are
+  linear RGB. Grayscale is expanded to RGB (R=G=B). Multi-byte elements
+  (`u16`, `f32`) are **native-endian** — e.g. `<<v::native-16>>` /
+  `<<v::native-float-32>>`. A binary's size must equal
+  `width * height * channels * bytes_per_element` for its format.
   """
 
   alias Ssimulacra2.{Native, Validate}

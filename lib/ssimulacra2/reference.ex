@@ -2,10 +2,12 @@ defmodule Ssimulacra2.Reference do
   @moduledoc """
   A precomputed SSIMULACRA2 reference image for efficient batch comparison.
 
-  Build one with `new/3`, then call `compare/2` repeatedly against candidate
-  images of the same dimensions. This reuses the reference's internal pyramid
-  and is roughly twice as fast per comparison as `Ssimulacra2.compare/4` —
-  ideal for a quality-search loop comparing many encodings against one original.
+  Build one with `new/4` (optionally passing a `format:` — see `Ssimulacra2`
+  for the supported formats; default `:rgb888`), then call `compare/2`
+  repeatedly against candidate images of the same dimensions and format. This
+  reuses the reference's internal pyramid and is roughly twice as fast per
+  comparison as `Ssimulacra2.compare/5` — ideal for a quality-search loop
+  comparing many encodings against one original.
   """
 
   alias Ssimulacra2.{Native, Validate}
