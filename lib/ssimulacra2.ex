@@ -44,6 +44,18 @@ defmodule Ssimulacra2 do
     if byte_size(bin) == width * height * 3, do: :ok, else: {:error, :size_mismatch}
   end
 
+  @doc """
+  Like `compare/4` but returns the bare score and raises `Ssimulacra2.Error`
+  on failure.
+  """
+  @spec compare!(rgb888(), rgb888(), pos_integer(), pos_integer()) :: float()
+  def compare!(reference, distorted, width, height) do
+    case compare(reference, distorted, width, height) do
+      {:ok, score} -> score
+      {:error, reason} -> raise Ssimulacra2.Error, reason: reason
+    end
+  end
+
   defp map_native_error({:ok, score}), do: {:ok, score}
   defp map_native_error({:error, message}), do: {:error, {:ssimulacra2, message}}
 end

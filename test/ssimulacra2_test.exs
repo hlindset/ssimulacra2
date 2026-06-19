@@ -40,4 +40,17 @@ defmodule Ssimulacra2Test do
       assert different < identical
     end
   end
+
+  describe "compare!/4" do
+    test "returns the bare score on success" do
+      img = Fixtures.gradient(32, 32)
+      assert Ssimulacra2.compare!(img, img, 32, 32) > 99.0
+    end
+
+    test "raises Ssimulacra2.Error on bad input" do
+      assert_raise Ssimulacra2.Error, fn ->
+        Ssimulacra2.compare!(<<>>, <<>>, 0, 0)
+      end
+    end
+  end
 end
