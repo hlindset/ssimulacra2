@@ -137,7 +137,15 @@ Vix:
 ## Out of scope
 
 - Plain-SSIM metric (separate from input formats; remains future work).
-- Vix grayscale / linear auto-detection.
+- Vix grayscale / linear auto-detection. Rationale: for SSIMULACRA2 these are an
+  optimization, not a fidelity gain — the metric linearizes every input and
+  expands grayscale to R=G=B, so `:gray8` scores identically to RGB with three
+  equal channels, and `:linear_rgb` scores identically (modulo float rounding) to
+  the gamma-RGB form of the same image. The chosen UCHAR-vs-other branch already
+  routes float/linear sources through the 16-bit path, capturing the precision
+  that actually changes scores. Detection would add a branching matrix over
+  `interpretation`/`bands`/`format` plus a gap (no 16-bit grayscale format exists
+  in our set) for no perceptible score change.
 - RGBA / alpha as a fourth channel (SSIMULACRA2 scores three channels; alpha is
   dropped/flattened, as today).
 - Non-native endianness handling.
