@@ -26,8 +26,17 @@ defmodule Ssimulacra2.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
-  # Filled in fully in a later task (Task 9). Placeholder so project/0 compiles now.
-  defp package, do: []
+  defp package do
+    [
+      licenses: ["BSD-2-Clause"],
+      links: %{
+        "GitHub" => "https://github.com/hlindset/ssimulacra2",
+        "fast-ssim2" => "https://github.com/imazen/fast-ssim2"
+      },
+      files: ~w(lib native/ssimulacra2_nif/src native/ssimulacra2_nif/Cargo.toml
+                native/ssimulacra2_nif/Cargo.lock mix.exs README.md checksum-*.exs)
+    ]
+  end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
