@@ -278,7 +278,11 @@ defp elixirc_paths(:test), do: ["lib", "test/support"]
 defp elixirc_paths(_), do: ["lib"]
 ```
 
-(Add a `package/0` returning `[]` for now; filled in Task 11.)
+Also add a placeholder `package/0` in the same `mix.exs` (filled in fully in Task 9) so `project/0`'s `package: package()` resolves and the project compiles:
+
+```elixir
+defp package, do: []
+```
 
 - [ ] **Step 3: Write failing validation tests**
 
@@ -338,7 +342,8 @@ defmodule Ssimulacra2 do
   alias Ssimulacra2.Native
 
   @type rgb888 :: binary()
-  @type reason :: :invalid_dimensions | :size_mismatch | {:ssimulacra2, String.t()}
+  @type reason ::
+          :invalid_dimensions | :size_mismatch | :dimension_mismatch | {:ssimulacra2, String.t()}
 
   @doc """
   Compare a reference and distorted RGB888 image of the same dimensions.
@@ -462,24 +467,22 @@ fn compare(
 ) -> Result<f64, String> {
     let r = as_imgref(reference.as_slice(), width, height);
     let d = as_imgref(distorted.as_slice(), width, height);
-    compute_ssimulacra2(r, d)
-        .map(|s| s as f64)
-        .map_err(|e| e.to_string())
+    compute_ssimulacra2(r, d).map_err(|e| e.to_string())
 }
 
 rustler::init!("Elixir.Ssimulacra2.Native");
 ```
 
-- [ ] **Step 4: Remove the now-shadowing Elixir stub**
+- [ ] **Step 4: Confirm the Native stub is intact (no change)**
 
-In `lib/ssimulacra2/native.ex`, delete the `def compare(...)` stub body and replace with a proper NIF stub (kept for when the NIF fails to load):
+`lib/ssimulacra2/native.ex` already has, exactly once:
 
 ```elixir
   def compare(_reference, _distorted, _width, _height),
     do: :erlang.nif_error(:nif_not_loaded)
 ```
 
-(Unchanged in shape — confirm it is still present exactly once. The real implementation comes from the loaded NIF and overrides this at load time.)
+The loaded NIF overrides this at load time; the stub only matters if the NIF fails to load. No edit needed — just verify it is present.
 
 - [ ] **Step 5: Rebuild and run**
 
@@ -648,9 +651,7 @@ fn compare(
 ) -> Result<f64, String> {
     let r = as_imgref(reference.as_slice(), width, height);
     let d = as_imgref(distorted.as_slice(), width, height);
-    compute_ssimulacra2(r, d)
-        .map(|s| s as f64)
-        .map_err(|e| e.to_string())
+    compute_ssimulacra2(r, d).map_err(|e| e.to_string())
 }
 
 /// Precomputed reference, owned by the BEAM and handed back as an opaque resource.
@@ -680,17 +681,13 @@ fn reference_compare(
     height: usize,
 ) -> Result<f64, String> {
     let d = as_imgref(distorted.as_slice(), width, height);
-    reference
-        .inner
-        .compare(d)
-        .map(|s| s as f64)
-        .map_err(|e| e.to_string())
+    reference.inner.compare(d).map_err(|e| e.to_string())
 }
 
 rustler::init!("Elixir.Ssimulacra2.Native");
 ```
 
-**Note:** This assumes `Ssimulacra2Reference: Send + Sync` (required by `ResourceArc`). If the crate's type is not `Sync`, wrap it in a `std::sync::Mutex` inside `ReferenceResource` and lock in `reference_compare`. Verify by compiling — a missing bound surfaces as a clear compile error.
+**Note:** `ResourceArc<T>` requires `T: Send + Sync`. `Ssimulacra2Reference` is confirmed `Send + Sync` in fast-ssim2 0.8.2 (docs.rs auto-trait impls), so the code above compiles as written. If a future crate version were to drop that bound, wrap `inner` in a `std::sync::Mutex` and lock in `reference_compare` — a missing bound surfaces as a clear compile error.
 
 - [ ] **Step 4: Add NIF stubs in Native**
 
@@ -796,8 +793,16 @@ defmodule Ssimulacra2.VixTest do
   alias Vix.Vips.Image
 
   test "compare/2 scores identical Vix images ~100" do
-    {:ok, img} = Image.new_from_buffer(black_png(), "")
+    {:ok, img} = Image.new_from_buffer(black_png())
     assert {:ok, score} = Ssimulacra2.Vix.compare(img, img)
+    assert score > 99.0
+  end
+
+  test "reference/1 builds a Reference usable with Reference.compare/2" do
+    {:ok, img} = Image.new_from_buffer(black_png())
+    assert {:ok, %Ssimulacra2.Reference{} = ref} = Ssimulacra2.Vix.reference(img)
+    {:ok, bin} = Vix.Vips.Image.write_to_binary(img)
+    assert {:ok, score} = Ssimulacra2.Reference.compare(ref, bin)
     assert score > 99.0
   end
 
@@ -1042,6 +1047,10 @@ defp package do
 end
 ```
 
+**Publish note (out of scope for this session, required before `mix hex.publish`):** after the release workflow uploads precompiled artifacts for a tag, generate the checksum file the `files:` list references by running
+`mise exec -- mix rustler_precompiled.download Ssimulacra2.Native --all --print`,
+which writes `checksum-Elixir.Ssimulacra2.Native.exs`. Without it, a published package omits the checksum and precompiled loading fails for consumers. This session stops at `git push` (Task 11) — no Hex publish — so this is documented here as the next gate, not executed now.
+
 - [ ] **Step 2: Write the README**
 
 Create `README.md`:
@@ -1126,7 +1135,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: jdx/mise-action@v4
       - name: Install deps
         run: mise exec -- mix deps.get
       - name: Compile (warnings as errors)
@@ -1156,7 +1165,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nif: ["2.16", "2.15"]
+        nif: ["2.17", "2.16", "2.15"]
         job:
           - { target: aarch64-apple-darwin, os: macos-14 }
           - { target: x86_64-apple-darwin, os: macos-13 }
@@ -1167,7 +1176,7 @@ jobs:
           - { target: x86_64-pc-windows-msvc, os: windows-2022 }
     steps:
       - uses: actions/checkout@v4
-      - uses: philss/rustler-precompiled-action@v1.1.4
+      - uses: philss/rustler-precompiled-action@v1.1.5
         with:
           project-name: ssimulacra2_nif
           project-version: ${{ github.ref_name }}
@@ -1257,8 +1266,8 @@ Expected: branch published to `https://github.com/hlindset/ssimulacra2`.
 ## Self-Review Notes
 
 - **Spec coverage:** binary-core API (Tasks 3–5), Reference batch path (Task 6), optional Vix helper (Task 7), native 0–100 score (Task 4), dirty scheduler (Task 4/6), error handling (Tasks 3/5), rustler_precompiled distribution (Tasks 2/10/11), conformance gating (Task 8), deferred-format issues (Task 11), standalone repo + push (Task 11). All covered.
-- **Score type:** `fast-ssim2` returns `f32`; the NIF casts to `f64` (Tasks 4/6). Tests assert ranges, not exact equality.
-- **Reference resource Send+Sync:** flagged in Task 6 Step 3 with a Mutex fallback if the bound is missing.
+- **Score type:** `compute_ssimulacra2` / `Ssimulacra2Reference.compare` return `f64` (verified on docs.rs 0.8.2). The NIF returns it directly; tests assert ranges, not exact equality.
+- **Reference resource Send+Sync:** `Ssimulacra2Reference` is confirmed `Send + Sync` in 0.8.2, so `ResourceArc` works directly (Task 6); the Mutex note is a forward-compat fallback only.
 - **force_build:** starts `true` (Task 2) for local-only dev, then release-gated (Task 11) — consistent across tasks.
 - **Open value:** conformance tolerance is intentionally measured (Task 8), not guessed — matches the spec's empirical-tolerance decision.
 ```

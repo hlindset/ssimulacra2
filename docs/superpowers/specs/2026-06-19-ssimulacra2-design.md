@@ -106,9 +106,12 @@ entering the NIF, so the dirty path does compute only.
 ## Error handling
 
 - Elixir guard clauses + `{:error, reason}`:
-  - `:size_mismatch` — binary `byte_size` ≠ `w*h*3`
-  - `:dimension_mismatch` — candidate binary size vs stored reference dims
   - `:invalid_dimensions` — width or height ≤ 0
+  - `:size_mismatch` — a binary's `byte_size` ≠ `w*h*3`. This is also what the
+    `Reference` path returns when a candidate's size doesn't match the stored
+    reference dims (byte size is the only signal available at that boundary).
+  - `:dimension_mismatch` — produced only by `Ssimulacra2.Vix.compare/2`, when the
+    two supplied images have differing width/height.
 - Rust `Ssimulacra2Error` (e.g. image too small) → `{:error, {:ssimulacra2, message}}`.
 - `compare!/4` raises `Ssimulacra2.Error`.
 
