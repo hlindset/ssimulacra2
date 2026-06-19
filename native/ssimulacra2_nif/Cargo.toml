@@ -1,0 +1,15 @@
+[package]
+name = "ssimulacra2_nif"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+
+[lib]
+name = "ssimulacra2_nif"
+crate-type = ["cdylib"]
+
+[dependencies]
+rustler = "0.38.0"
+fast-ssim2 = "0.8.2"
+imgref = "1"
+bytemuck = "1"

@@ -1,8 +1,7 @@
 defmodule Ssimulacra2Test do
-  use ExUnit.Case
-  doctest Ssimulacra2
+  use ExUnit.Case, async: true
 
-  test "greets the world" do
-    assert Ssimulacra2.hello() == :world
+  test "native library loads" do
+    assert Ssimulacra2.Native.nif_loaded() == true
   end
 end
