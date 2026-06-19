@@ -27,7 +27,7 @@ defmodule Ssimulacra2 do
 
   alias Ssimulacra2.{Native, Validate}
 
-  @type rgb888 :: binary()
+  @type image_data :: binary()
   @type reason ::
           :invalid_dimensions
           | :size_mismatch
@@ -44,7 +44,7 @@ defmodule Ssimulacra2 do
 
   Returns `{:ok, score}` or `{:error, reason}`.
   """
-  @spec compare(rgb888(), rgb888(), pos_integer(), pos_integer(), keyword()) ::
+  @spec compare(image_data(), image_data(), pos_integer(), pos_integer(), keyword()) ::
           {:ok, float()} | {:error, reason()}
   def compare(reference, distorted, width, height, opts \\ [])
       when is_binary(reference) and is_binary(distorted) do
@@ -63,7 +63,7 @@ defmodule Ssimulacra2 do
   Like `compare/5` but returns the bare score and raises `Ssimulacra2.Error`
   on failure. Accepts the same `format:` option, defaulting to `:rgb888`.
   """
-  @spec compare!(rgb888(), rgb888(), pos_integer(), pos_integer(), keyword()) :: float()
+  @spec compare!(image_data(), image_data(), pos_integer(), pos_integer(), keyword()) :: float()
   def compare!(reference, distorted, width, height, opts \\ []) do
     case compare(reference, distorted, width, height, opts) do
       {:ok, score} -> score

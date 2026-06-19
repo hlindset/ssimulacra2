@@ -23,7 +23,7 @@ defmodule Ssimulacra2.Reference do
         }
 
   @doc "Precompute a reference from a packed binary of the given format (default :rgb888)."
-  @spec new(binary(), pos_integer(), pos_integer(), keyword()) ::
+  @spec new(Ssimulacra2.image_data(), pos_integer(), pos_integer(), keyword()) ::
           {:ok, t()} | {:error, Ssimulacra2.reason()}
   def new(source, width, height, opts \\ []) when is_binary(source) do
     format = Keyword.get(opts, :format, :rgb888)
@@ -37,7 +37,7 @@ defmodule Ssimulacra2.Reference do
   end
 
   @doc "Compare a candidate against the precomputed reference (same format as the reference)."
-  @spec compare(t(), binary()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
+  @spec compare(t(), Ssimulacra2.image_data()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
     with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format) do
       Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format)
@@ -46,7 +46,7 @@ defmodule Ssimulacra2.Reference do
   end
 
   @doc "Like `new/4` but returns the reference or raises `Ssimulacra2.Error`."
-  @spec new!(binary(), pos_integer(), pos_integer(), keyword()) :: t()
+  @spec new!(Ssimulacra2.image_data(), pos_integer(), pos_integer(), keyword()) :: t()
   def new!(source, width, height, opts \\ []) do
     case new(source, width, height, opts) do
       {:ok, ref} -> ref
@@ -55,7 +55,7 @@ defmodule Ssimulacra2.Reference do
   end
 
   @doc "Like `compare/2` but returns the bare score or raises `Ssimulacra2.Error`."
-  @spec compare!(t(), binary()) :: float()
+  @spec compare!(t(), Ssimulacra2.image_data()) :: float()
   def compare!(%__MODULE__{} = ref, distorted) do
     case compare(ref, distorted) do
       {:ok, score} -> score

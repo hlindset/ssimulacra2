@@ -2,7 +2,7 @@ defmodule Ssimulacra2.ReferenceTest do
   use ExUnit.Case, async: true
   alias Ssimulacra2.{Fixtures, Reference}
 
-  test "new/3 then compare/2 matches one-shot compare/4" do
+  test "new/4 then compare/2 matches one-shot compare/5" do
     ref_img = Fixtures.gradient(64, 64)
     cand = Fixtures.solid(64, 64, {200, 100, 50})
 
@@ -18,20 +18,26 @@ defmodule Ssimulacra2.ReferenceTest do
     assert {:error, :size_mismatch} = Reference.compare(ref, Fixtures.solid(32, 32, {0, 0, 0}))
   end
 
-  test "new/3 validates dimensions and size" do
+  test "new/4 validates dimensions and size" do
     assert {:error, :invalid_dimensions} = Reference.new(<<>>, 0, 0)
     assert {:error, :size_mismatch} = Reference.new(Fixtures.solid(4, 3, {0, 0, 0}), 4, 4)
   end
 
   describe "bang variants" do
-    test "new!/3 returns a reference and compare!/2 returns a bare score" do
+    test "new!/4 returns a reference and compare!/2 returns a bare score" do
       ref = Reference.new!(Fixtures.gradient(32, 32), 32, 32)
       assert %Reference{} = ref
       assert Reference.compare!(ref, Fixtures.gradient(32, 32)) > 99.0
     end
 
-    test "new!/3 raises on bad input" do
+    test "new!/4 raises on bad input" do
       assert_raise Ssimulacra2.Error, fn -> Reference.new!(<<>>, 0, 0) end
+    end
+
+    test "new!/4 raises on an unknown format" do
+      assert_raise Ssimulacra2.Error, fn ->
+        Reference.new!(Fixtures.gradient_rgb16(8, 8), 8, 8, format: :bogus)
+      end
     end
 
     test "compare!/2 raises on a wrong-size candidate" do

@@ -28,8 +28,8 @@ difference.
 | `:gray8` | `u8` | 1 | 1 | sRGB grayscale |
 | `:linear_gray` | `f32` | 1 | 4 | linear grayscale |
 
-Convention: integer = sRGB gamma, float = linear. Multi-byte elements are
-native-endian.
+Convention: integer = sRGB gamma, float = linear. Grayscale is expanded to RGB
+(R=G=B). Multi-byte elements are native-endian.
 
 ```elixir
 {:ok, score} = Ssimulacra2.compare(ref_rgb, dist_rgb, width, height)

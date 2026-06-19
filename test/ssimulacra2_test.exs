@@ -6,7 +6,7 @@ defmodule Ssimulacra2Test do
     assert Ssimulacra2.Native.nif_loaded() == true
   end
 
-  describe "compare/4 validation" do
+  describe "compare/5 validation" do
     test "rejects non-positive dimensions" do
       assert {:error, :invalid_dimensions} = Ssimulacra2.compare(<<>>, <<>>, 0, 10)
       assert {:error, :invalid_dimensions} = Ssimulacra2.compare(<<>>, <<>>, 10, -1)
@@ -25,7 +25,7 @@ defmodule Ssimulacra2Test do
     end
   end
 
-  describe "compare/4 scoring" do
+  describe "compare/5 scoring" do
     test "identical images score ~100" do
       img = Fixtures.gradient(64, 64)
       assert {:ok, score} = Ssimulacra2.compare(img, img, 64, 64)
@@ -41,7 +41,7 @@ defmodule Ssimulacra2Test do
     end
   end
 
-  describe "compare!/4" do
+  describe "compare!/5" do
     test "returns the bare score on success" do
       img = Fixtures.gradient(32, 32)
       assert Ssimulacra2.compare!(img, img, 32, 32) > 99.0
@@ -50,6 +50,19 @@ defmodule Ssimulacra2Test do
     test "raises Ssimulacra2.Error on bad input" do
       assert_raise Ssimulacra2.Error, fn ->
         Ssimulacra2.compare!(<<>>, <<>>, 0, 0)
+      end
+    end
+
+    test "passes a non-default format through to the bare score" do
+      img = Fixtures.gradient_rgb16(32, 32)
+      assert Ssimulacra2.compare!(img, img, 32, 32, format: :rgb16) > 99.0
+    end
+
+    test "raises Ssimulacra2.Error on an unknown format" do
+      img = Fixtures.gradient_rgb16(8, 8)
+
+      assert_raise Ssimulacra2.Error, fn ->
+        Ssimulacra2.compare!(img, img, 8, 8, format: :bogus)
       end
     end
   end
