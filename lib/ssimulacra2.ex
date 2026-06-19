@@ -60,7 +60,7 @@ defmodule Ssimulacra2 do
   end
 
   @doc """
-  Like `compare/4` but returns the bare score and raises `Ssimulacra2.Error`
+  Like `compare/5` but returns the bare score and raises `Ssimulacra2.Error`
   on failure. Accepts the same `format:` option, defaulting to `:rgb888`.
   """
   @spec compare!(rgb888(), rgb888(), pos_integer(), pos_integer(), keyword()) :: float()
