@@ -15,12 +15,25 @@ end
 
 ## Usage
 
-Inputs are packed 8-bit sRGB `RGB888` binaries (`byte_size == width * height * 3`).
-Scores are on the native SSIMULACRA2 0–100 scale: 100 = identical, ~90+ ≈
-visually lossless, lower (and negative) = larger perceptual difference.
+Inputs are packed binaries; the layout is selected with the `:format` option
+(default `:rgb888`). Scores are on the native SSIMULACRA2 0–100 scale: 100 =
+identical, ~90+ ≈ visually lossless, lower (and negative) = larger perceptual
+difference.
+
+| format | element | channels | bytes/pixel | color space |
+| --- | --- | --- | --- | --- |
+| `:rgb888` (default) | `u8` | 3 | 3 | sRGB (gamma) |
+| `:rgb16` | `u16` | 3 | 6 | sRGB (gamma) |
+| `:linear_rgb` | `f32` | 3 | 12 | linear RGB |
+| `:gray8` | `u8` | 1 | 1 | sRGB grayscale |
+| `:linear_gray` | `f32` | 1 | 4 | linear grayscale |
+
+Convention: integer = sRGB gamma, float = linear. Grayscale is expanded to RGB
+(R=G=B). Multi-byte elements are native-endian.
 
 ```elixir
 {:ok, score} = Ssimulacra2.compare(ref_rgb, dist_rgb, width, height)
+{:ok, score} = Ssimulacra2.compare(ref16, dist16, width, height, format: :rgb16)
 ```
 
 For a quality-search loop comparing many candidates against one original, reuse
@@ -54,8 +67,8 @@ implementation rather than against externally published numbers.
 
 ## Status
 
-v0.1 supports 8-bit sRGB input and the SSIMULACRA2 metric. 16-bit, linear-f32,
-and plain-SSIM support are tracked as issues.
+v0.1 supports 8-bit sRGB, 16-bit sRGB, linear-f32, and grayscale input for the
+SSIMULACRA2 metric. Plain-SSIM support is tracked as a future issue.
 
 ## Releasing
 
