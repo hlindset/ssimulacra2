@@ -8,8 +8,9 @@ defmodule Ssimulacra2.Native do
     crate: "ssimulacra2_nif",
     base_url: "https://github.com/hlindset/ssimulacra2/releases/download/v#{version}",
     version: version,
-    # Build locally for now; flip to a release-gated condition once artifacts are published (later task).
-    force_build: true,
+    force_build:
+      System.get_env("SSIMULACRA2_BUILD") in ["1", "true"] or
+        Application.compile_env(:ssimulacra2, :force_build, false),
     nif_versions: ["2.15", "2.16", "2.17"],
     targets: ~w(
       aarch64-apple-darwin
