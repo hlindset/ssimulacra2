@@ -40,6 +40,18 @@ If `:vix` is a dependency, pass images directly:
 {:ok, score} = Ssimulacra2.Vix.compare(ref_image, dist_image)
 ```
 
+## Accuracy
+
+Scores come from [`fast-ssim2`](https://github.com/imazen/fast-ssim2), a maintained
+SIMD implementation of SSIMULACRA2. This library has **not** been bit-exactly
+validated against the canonical Cloudinary/libjxl reference, so treat the absolute
+value as "SSIMULACRA2 as computed by `fast-ssim2`" rather than guaranteed parity
+with that reference. The metric is well-behaved and monotonic (identical images
+score 100; perceptual degradation lowers the score, into the negatives for large
+differences), which is what matters for relative use such as a quality-search loop.
+If you need a specific target score, calibrate the threshold against this
+implementation rather than against externally published numbers.
+
 ## Status
 
 v0.1 supports 8-bit sRGB input and the SSIMULACRA2 metric. 16-bit, linear-f32,

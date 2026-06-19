@@ -1,1 +1,1 @@
-ExUnit.start(exclude: [:vix, :conformance])
+ExUnit.start(exclude: [:vix])
