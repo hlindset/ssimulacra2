@@ -50,4 +50,24 @@ defmodule Ssimulacra2.FormatsTest do
     assert {:ok, default} = Ssimulacra2.compare(img, img, 64, 64)
     assert with_opt == default
   end
+
+  # A 1-byte prefix makes binary_part return a sub-binary at a misaligned byte
+  # offset, which would panic bytemuck::cast_slice for u16/f32 element types.
+  defp misaligned(bin), do: binary_part(<<0>> <> bin, 1, byte_size(bin))
+
+  test "scores an unaligned :rgb16 sub-binary without crashing" do
+    base = Fixtures.gradient_rgb16(16, 16)
+    shifted = misaligned(base)
+    assert byte_size(shifted) == byte_size(base)
+    assert {:ok, s} = Ssimulacra2.compare(shifted, shifted, 16, 16, format: :rgb16)
+    assert s > 99.0
+  end
+
+  test "scores an unaligned :linear_rgb sub-binary without crashing" do
+    base = Fixtures.gradient_linear_rgb(16, 16)
+    shifted = misaligned(base)
+    assert byte_size(shifted) == byte_size(base)
+    assert {:ok, s} = Ssimulacra2.compare(shifted, shifted, 16, 16, format: :linear_rgb)
+    assert s > 99.0
+  end
 end
