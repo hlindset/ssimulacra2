@@ -68,7 +68,7 @@ implementation rather than against externally published numbers.
 ## Status
 
 v0.1 supports 8-bit sRGB, 16-bit sRGB, linear-f32, and grayscale input for the
-SSIMULACRA2 metric. Plain-SSIM support is tracked as a future issue.
+SSIMULACRA2 metric.
 
 ## Releasing
 
