@@ -37,6 +37,16 @@ design wires that cancellation through to Elixir so an in-flight `compare` /
 - Exposing `strip_height` as a public option (YAGNI — internal constant for now).
 - Progress reporting / partial scores.
 
+## Behavior change
+
+Switching to the strip path changes one edge case: the strip API rejects images
+smaller than 8 px on a side (`Ssimulacra2Error::InvalidImageSize`), whereas the
+old non-strip path reflect-padded them up to 8 px and scored them. So a `<8px`
+comparison now returns `{:error, {:ssimulacra2, _}}` instead of a score. This is
+acceptable (pre-release v0.1; no caller or test scores a sub-8px image — the
+smallest successful score in the suite is 16×16) and must be documented on both
+`Ssimulacra2.compare/5` and `Ssimulacra2.Reference.compare/3`.
+
 ## Key constraint
 
 A running `DirtyCpu` NIF blocks its scheduler thread until it returns, so the
@@ -178,8 +188,10 @@ When only `:cancel` is given (no `:timeout`), skip the canceller: pass the
 token's resource straight through and map `:cancelled` → `:cancelled`. When
 neither is given, pass `nil`.
 
-If both `:cancel` and `:timeout` are given, the timer trips the user's token and
-`:timeout` takes precedence in the mapping.
+If both `:cancel` and `:timeout` are given, the timer trips the user's token. The
+result is `:timeout` only when the *timer* fired; a token tripped externally
+before the timer yields `:cancelled` (whichever cause the canceller observed
+wins — the mapping is deterministic given that observation).
 
 Validation: `:timeout`, when present, must be a positive integer; `:cancel`, when
 present, must be a `%CancellationToken{}`. Reuse the existing `Validate` module

@@ -314,6 +314,12 @@ defmodule Ssimulacra2.StripParityTest do
   golden numbers were captured from the pre-strip build; a change larger than
   the delta means the strip path is not equivalent — investigate before
   accepting any drift.
+
+  rgb888 is a sufficient proxy for all five formats: every format is converted
+  to linear RGB (`ToLinearRgb`) *before* the strip walk, and the strip-vs-
+  non-strip difference is entirely in that post-conversion walk. So a single
+  format gates the change for all of them; the existing per-format parity tests
+  cover the conversion paths.
   """
   use ExUnit.Case, async: true
   alias Ssimulacra2.{Fixtures, Reference}
@@ -366,10 +372,25 @@ but internally runs the strip-with-stop path and returns the new error shape.
 - Modify: `lib/ssimulacra2.ex`
 - Modify: `lib/ssimulacra2/reference.ex`
 
+- [ ] **Step 0: Confirm the upstream signatures at the pinned rev**
+
+These were verified against the source at rev `093aa6f…` during planning; confirm
+they still hold before writing the match arms (e.g. `grep` the crate source under
+`~/.cargo/registry/.../fast-ssim2-*/` after the Task 1 build, or read it on GitHub):
+- `compute_ssimulacra2_strip_with_stop<S, D>(source, distorted, strip_height: u32, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>`
+- `Ssimulacra2Reference::compare_strip_with_stop<T: ToLinearRgb>(&self, distorted: T, strip_height: u32, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>`
+- `Ssimulacra2Error::Cancelled(enough::StopReason)` (one-field tuple variant; enum is `#[non_exhaustive]`)
+- `almost_enough::SyncStopper::new()` and `.cancel()`; `SyncStopper: enough::Stop`
+
+If any differ, adjust the code in this task accordingly.
+
 - [ ] **Step 1: Update Rust imports and add the error enum + strip constant**
 
-In `native/ssimulacra2_nif/src/lib.rs`, change the `fast_ssim2` import and add
-the token-trait imports:
+In `native/ssimulacra2_nif/src/lib.rs`, change **only** the `fast_ssim2` import
+line and add the token-trait imports. **Keep the existing
+`use rustler::{Atom, Binary, ResourceArc};` line** (all of `Atom`, `Binary`,
+`ResourceArc` are still used, plus `rustler::Resource`/`rustler::resource_impl`
+fully-qualified) and the `use almost_enough::SyncStopper;` added in Task 2:
 
 ```rust
 use fast_ssim2::{
@@ -378,7 +399,9 @@ use fast_ssim2::{
 use enough::{Stop, Unstoppable};
 ```
 
-(Keep the existing `use almost_enough::SyncStopper;` from Task 2.)
+(The old `use fast_ssim2::{compute_ssimulacra2, ...};` line is fully replaced —
+do not leave it, or `compute_ssimulacra2` becomes an unused import and the
+`--warnings-as-errors` gate in Task 8 fails.)
 
 Add near the top (after the atoms module):
 
@@ -596,7 +619,10 @@ Create `test/ssimulacra2/cancellation_test.exs`:
 
 ```elixir
 defmodule Ssimulacra2.CancellationTest do
-  use ExUnit.Case, async: true
+  # async: false — the cross-process/timeout tests run large comparisons whose
+  # wall-clock must dominate the cancel/timer; running them serially keeps dirty
+  # schedulers uncontended so timing stays predictable.
+  use ExUnit.Case, async: false
   alias Ssimulacra2.{CancellationToken, Fixtures, Reference}
 
   test "compare/5 with a pre-cancelled token returns {:error, :cancelled}" do
@@ -623,19 +649,31 @@ defmodule Ssimulacra2.CancellationTest do
     assert_in_delta plain, with_tok, 1.0e-9
   end
 
+  test "a live token does not affect Reference.compare" do
+    a = Fixtures.gradient(64, 64)
+    b = Fixtures.solid(64, 64, {200, 100, 50})
+    {:ok, ref} = Reference.new(a, 64, 64)
+    tok = CancellationToken.new()
+    {:ok, plain} = Reference.compare(ref, b)
+    {:ok, with_tok} = Reference.compare(ref, b, cancel: tok)
+    assert_in_delta plain, with_tok, 1.0e-9
+  end
+
   test "cancelling from another process aborts an in-flight compare" do
-    big = Fixtures.solid(2500, 2500, {123, 50, 200})
+    # 3000x3000 (~9 MP): the metric runs for well over the ~10 ms head start
+    # below, so the cancel reliably lands mid-flight on idle CI too.
+    big = Fixtures.solid(3000, 3000, {123, 50, 200})
     tok = CancellationToken.new()
     parent = self()
 
     task =
       Task.async(fn ->
         send(parent, :started)
-        Ssimulacra2.compare(big, big, 2500, 2500, cancel: tok)
+        Ssimulacra2.compare(big, big, 3000, 3000, cancel: tok)
       end)
 
     assert_receive :started, 1000
-    Process.sleep(20)
+    Process.sleep(10)
     CancellationToken.cancel(tok)
 
     assert {:error, :cancelled} = Task.await(task, 30_000)
@@ -646,6 +684,14 @@ defmodule Ssimulacra2.CancellationTest do
     tok = CancellationToken.new()
     :ok = CancellationToken.cancel(tok)
     assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(img, img, 256, 256, cancel: tok) end
+  end
+
+  test "Reference.compare!/3 raises on cancellation" do
+    img = Fixtures.gradient(256, 256)
+    {:ok, ref} = Reference.new(img, 256, 256)
+    tok = CancellationToken.new()
+    :ok = CancellationToken.cancel(tok)
+    assert_raise Ssimulacra2.Error, fn -> Reference.compare!(ref, img, cancel: tok) end
   end
 
   test "an invalid :cancel value is rejected" do
@@ -775,6 +821,22 @@ Replace `compare/2`:
   end
 ```
 
+Widen the bang variant to forward opts (so `compare!(ref, dist, cancel: tok)`
+works). Replace `compare!/2`:
+
+```elixir
+  @doc "Like `compare/3` but returns the bare score or raises `Ssimulacra2.Error`."
+  @spec compare!(t(), Ssimulacra2.image_data(), keyword()) :: float()
+  def compare!(%__MODULE__{} = ref, distorted, opts \\ []) do
+    case compare(ref, distorted, opts) do
+      {:ok, score} -> score
+      {:error, reason} -> raise Ssimulacra2.Error, reason: reason
+    end
+  end
+```
+
+(The default `opts \\ []` keeps existing `compare!/2` callers working.)
+
 Delete the now-unused `map_compare/1` from `lib/ssimulacra2/reference.ex` (its
 mapping now lives in `Cancellation`). Keep `map_native/1` (used by `new/4`).
 
@@ -815,13 +877,15 @@ final `end`):
 
 ```elixir
   test "compare/5 returns {:error, :timeout} when it exceeds :timeout" do
-    big = Fixtures.solid(2000, 2000, {10, 20, 30})
-    assert {:error, :timeout} = Ssimulacra2.compare(big, big, 2000, 2000, timeout: 1)
+    # 2500x2500 (~6 MP): the metric runs for far longer than 1 ms, so the timer
+    # always wins, even on fast/idle CI.
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    assert {:error, :timeout} = Ssimulacra2.compare(big, big, 2500, 2500, timeout: 1)
   end
 
   test "Reference.compare/3 returns {:error, :timeout} when it exceeds :timeout" do
-    big = Fixtures.solid(2000, 2000, {10, 20, 30})
-    {:ok, ref} = Reference.new(big, 2000, 2000)
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    {:ok, ref} = Reference.new(big, 2500, 2500)
     assert {:error, :timeout} = Reference.compare(ref, big, timeout: 1)
   end
 
@@ -834,26 +898,26 @@ final `end`):
   end
 
   test "external cancel during a timed call is reported as :cancelled, not :timeout" do
-    big = Fixtures.solid(2500, 2500, {1, 2, 3})
+    big = Fixtures.solid(3000, 3000, {1, 2, 3})
     tok = CancellationToken.new()
     parent = self()
 
     task =
       Task.async(fn ->
         send(parent, :started)
-        Ssimulacra2.compare(big, big, 2500, 2500, cancel: tok, timeout: 60_000)
+        Ssimulacra2.compare(big, big, 3000, 3000, cancel: tok, timeout: 60_000)
       end)
 
     assert_receive :started, 1000
-    Process.sleep(20)
+    Process.sleep(10)
     CancellationToken.cancel(tok)
 
     assert {:error, :cancelled} = Task.await(task, 30_000)
   end
 
   test "compare!/5 raises on timeout" do
-    big = Fixtures.solid(2000, 2000, {10, 20, 30})
-    assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(big, big, 2000, 2000, timeout: 1) end
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(big, big, 2500, 2500, timeout: 1) end
   end
 
   test "an invalid :timeout value is rejected" do
@@ -883,7 +947,13 @@ In `lib/ssimulacra2/validate.ex`, add:
 - [ ] **Step 4: Add the timeout branch to `Cancellation.run`**
 
 In `lib/ssimulacra2/cancellation.ex`, add a second `run/3` clause (after the
-existing `nil`-timeout clause):
+existing `nil`-timeout clause).
+
+The caller runs the blocking dirty NIF in its own process and cannot clean up
+while parked there, so the canceller is wired with mutual monitoring: it
+monitors the parent (and exits if the parent dies mid-NIF — no orphan that lives
+for the full `timeout`), and the parent monitors the canceller (so its status
+`receive` can never block forever if the canceller dies abnormally).
 
 ```elixir
   def run(cancel, timeout, invoke) when is_integer(timeout) and timeout > 0 do
@@ -891,10 +961,13 @@ existing `nil`-timeout clause):
     parent = self()
     tag = make_ref()
 
-    canceller =
-      spawn(fn ->
+    {canceller, cref} =
+      spawn_monitor(fn ->
+        parent_ref = Process.monitor(parent)
+
         receive do
           {:done, ^tag} -> send(parent, {:status, tag, :not_timed_out})
+          {:DOWN, ^parent_ref, :process, ^parent, _} -> :ok
         after
           timeout ->
             CancellationToken.cancel(token)
@@ -904,11 +977,14 @@ existing `nil`-timeout clause):
 
     result = invoke.(token.resource)
     send(canceller, {:done, tag})
+
     status =
       receive do
         {:status, ^tag, s} -> s
+        {:DOWN, ^cref, :process, _, _} -> :not_timed_out
       end
 
+    Process.demonitor(cref, [:flush])
     map_result(result, status)
   end
 ```
@@ -1028,6 +1104,10 @@ In `lib/ssimulacra2/reference.ex`, update `compare/3`'s `@doc`:
   Accepts `cancel:` (an `Ssimulacra2.CancellationToken`) and `timeout:`
   (milliseconds) to abort an in-flight comparison; see `Ssimulacra2.compare/5`.
   Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
+
+  Note: candidates smaller than 8 px on a side now return
+  `{:error, {:ssimulacra2, _}}` rather than being scored (see
+  `Ssimulacra2.compare/5`).
 ```
 
 - [ ] **Step 3: Add a cancellation section to the README**
