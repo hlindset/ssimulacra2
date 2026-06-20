@@ -1123,6 +1123,23 @@ In `lib/ssimulacra2.ex`, update the `compare/5` `@doc` to describe the new opts
   bound the wall-clock time — the call returns `{:error, :timeout}` if it
   exceeds that. Both may be combined; cancellation is checked at strip
   boundaries, so the CPU is freed promptly without leaving the dirty scheduler.
+
+  Invalid options return `{:error, :invalid_cancel}` / `{:error, :invalid_timeout}`.
+```
+
+- [ ] **Step 1b: Add a cancellation pointer to the `Ssimulacra2` moduledoc**
+
+In `lib/ssimulacra2.ex`, append a short paragraph to the existing `@moduledoc`
+(after the Formats section) so the feature is discoverable from the module's
+top-level docs, not just the function doc:
+
+```
+  ## Cancellation
+
+  `compare/5` and `Ssimulacra2.Reference.compare/3` accept `cancel:` (an
+  `Ssimulacra2.CancellationToken`) and `timeout:` (milliseconds) to abort a
+  long comparison mid-computation, returning `{:error, :cancelled}` or
+  `{:error, :timeout}`. See `Ssimulacra2.CancellationToken`.
 ```
 
 - [ ] **Step 2: Document the options on `Reference.compare/3`**
@@ -1135,20 +1152,39 @@ In `lib/ssimulacra2/reference.ex`, update `compare/3`'s `@doc`:
   Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
 ```
 
-- [ ] **Step 3: Add a cancellation section to the README**
+- [ ] **Step 3: Update the README — cancellation section + fix the precompiled/build notes**
 
-In `README.md`, add a section (place it after the existing usage examples):
+Three edits in `README.md`:
+
+**(a) Fix the misleading intro.** The current opening (lines 3-6) advertises
+precompiled NIFs with no Rust toolchain. While git-pinned that is not true.
+Replace the sentence "Published with precompiled NIFs, so the Rust toolchain is
+not required if you're on a covered architecture + platform." with:
+
+```
+> **Pre-release note:** this version pins `fast-ssim2` to an unreleased git
+> revision (for cooperative cancellation, pending an upstream release), so it is
+> **built from source** — set `SSIMULACRA2_BUILD=1` or
+> `config :ssimulacra2, force_build: true`, and ensure a Rust toolchain (≥ 1.89)
+> is available. Precompiled NIFs return once `fast-ssim2` cuts a release.
+```
+
+**(b) Add the cancellation section** after the Usage examples (after the Vix
+subsection):
 
 ```markdown
-## Cancellation & timeouts
+### Cancellation & timeouts
 
-Long comparisons can be aborted mid-computation:
+`compare/5` and `Reference.compare/3` can be aborted mid-computation. The metric
+runs on a dirty scheduler and polls a cancellation token at strip boundaries, so
+the CPU is freed promptly.
 
 ​```elixir
 # Wall-clock timeout — returns {:error, :timeout} if it overruns.
 Ssimulacra2.compare(ref, dist, w, h, timeout: 3_000)
 
-# External cancellation — trip the token from any process.
+# External cancellation — the token is tripped from another process, because the
+# calling process is blocked in the NIF until it returns.
 tok = Ssimulacra2.CancellationToken.new()
 task = Task.async(fn -> Ssimulacra2.compare(ref, dist, w, h, cancel: tok) end)
 # ... on client disconnect / shutdown:
@@ -1156,13 +1192,34 @@ Ssimulacra2.CancellationToken.cancel(tok)
 Task.await(task)  #=> {:error, :cancelled}
 ​```
 
-Both options work on `Ssimulacra2.Reference.compare/3` too. Cancellation is
-cooperative (checked at strip boundaries) and frees the CPU promptly.
+A quality-search loop can share one token across probes for an overall deadline
+(or disconnect). Tripping it aborts the in-flight probe and makes every later
+probe return `{:error, :cancelled}` at once:
 
-> **Build note:** while this library pins `fast-ssim2` to a git revision
-> (pending an upstream release), it cannot be consumed via precompiled NIFs —
-> build from source with `SSIMULACRA2_BUILD=1` or `config :ssimulacra2,
-> force_build: true`.
+​```elixir
+{:ok, ref} = Ssimulacra2.Reference.new(original, w, h)
+tok = Ssimulacra2.CancellationToken.new()
+
+# Watchdog trips the shared token on the search deadline (a disconnect monitor
+# can call cancel/1 too).
+spawn(fn -> Process.sleep(5_000); Ssimulacra2.CancellationToken.cancel(tok) end)
+
+case Ssimulacra2.Reference.compare(ref, candidate, cancel: tok) do
+  {:ok, score}         -> score
+  {:error, :cancelled} -> :deadline_or_disconnect
+end
+​```
+
+A token is single-use: once cancelled it stays cancelled.
+```
+
+**(c) Amend the "Building from source" section** (currently "only needed if…")
+to note that during the git-pin window building from source is **required**, not
+optional. Prepend to that section:
+
+```
+During the pre-release git-pin window above, building from source is required
+(there are no precompiled artifacts for the git-pinned `fast-ssim2`).
 ```
 
 (Remove the zero-width space characters shown around the code fences — they are
