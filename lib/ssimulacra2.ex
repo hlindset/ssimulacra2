@@ -34,7 +34,9 @@ defmodule Ssimulacra2 do
           | :dimension_mismatch
           | :unknown_format
           | :invalid_cancel
+          | :invalid_timeout
           | :cancelled
+          | :timeout
           | {:ssimulacra2, String.t()}
 
   @doc """
@@ -52,13 +54,15 @@ defmodule Ssimulacra2 do
       when is_binary(reference) and is_binary(distorted) do
     format = Keyword.get(opts, :format, :rgb888)
     cancel = Keyword.get(opts, :cancel)
+    timeout = Keyword.get(opts, :timeout)
 
     with :ok <- Validate.format(format),
          :ok <- Validate.dims(width, height),
          :ok <- Validate.size(reference, width, height, format),
          :ok <- Validate.size(distorted, width, height, format),
-         :ok <- Validate.cancel(cancel) do
-      Cancellation.run(cancel, nil, fn resource ->
+         :ok <- Validate.cancel(cancel),
+         :ok <- Validate.timeout(timeout) do
+      Cancellation.run(cancel, timeout, fn resource ->
         Native.compare(reference, distorted, width, height, format, resource)
       end)
     end

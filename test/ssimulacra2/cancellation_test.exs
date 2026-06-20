@@ -78,4 +78,54 @@ defmodule Ssimulacra2.CancellationTest do
     img = Fixtures.gradient(64, 64)
     assert {:error, :invalid_cancel} = Ssimulacra2.compare(img, img, 64, 64, cancel: :nope)
   end
+
+  test "compare/5 returns {:error, :timeout} when it exceeds :timeout" do
+    # 2500x2500 (~6 MP): the metric runs for far longer than 1 ms, so the timer
+    # always wins, even on fast/idle CI.
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    assert {:error, :timeout} = Ssimulacra2.compare(big, big, 2500, 2500, timeout: 1)
+  end
+
+  test "Reference.compare/3 returns {:error, :timeout} when it exceeds :timeout" do
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    {:ok, ref} = Reference.new(big, 2500, 2500)
+    assert {:error, :timeout} = Reference.compare(ref, big, timeout: 1)
+  end
+
+  test "a generous :timeout returns the same score as no timeout" do
+    a = Fixtures.gradient(64, 64)
+    b = Fixtures.solid(64, 64, {200, 100, 50})
+    {:ok, plain} = Ssimulacra2.compare(a, b, 64, 64)
+    {:ok, timed} = Ssimulacra2.compare(a, b, 64, 64, timeout: 60_000)
+    assert_in_delta plain, timed, 1.0e-9
+  end
+
+  test "external cancel during a timed call is reported as :cancelled, not :timeout" do
+    big = Fixtures.solid(3000, 3000, {1, 2, 3})
+    tok = CancellationToken.new()
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        send(parent, :started)
+        Ssimulacra2.compare(big, big, 3000, 3000, cancel: tok, timeout: 60_000)
+      end)
+
+    assert_receive :started, 1000
+    Process.sleep(10)
+    CancellationToken.cancel(tok)
+
+    assert {:error, :cancelled} = Task.await(task, 30_000)
+  end
+
+  test "compare!/5 raises on timeout" do
+    big = Fixtures.solid(2500, 2500, {10, 20, 30})
+    assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(big, big, 2500, 2500, timeout: 1) end
+  end
+
+  test "an invalid :timeout value is rejected" do
+    img = Fixtures.gradient(64, 64)
+    assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: 0)
+    assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: -5)
+  end
 end

@@ -48,10 +48,12 @@ defmodule Ssimulacra2.Reference do
           {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted, opts \\ []) when is_binary(distorted) do
     cancel = Keyword.get(opts, :cancel)
+    timeout = Keyword.get(opts, :timeout)
 
     with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format),
-         :ok <- Validate.cancel(cancel) do
-      Cancellation.run(cancel, nil, fn resource ->
+         :ok <- Validate.cancel(cancel),
+         :ok <- Validate.timeout(timeout) do
+      Cancellation.run(cancel, timeout, fn resource ->
         Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format, resource)
       end)
     end

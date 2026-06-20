@@ -26,6 +26,11 @@ defmodule Ssimulacra2.Validate do
   def cancel(%Ssimulacra2.CancellationToken{}), do: :ok
   def cancel(_), do: {:error, :invalid_cancel}
 
+  @doc "Returns :ok or {:error, :invalid_timeout}."
+  def timeout(nil), do: :ok
+  def timeout(ms) when is_integer(ms) and ms > 0, do: :ok
+  def timeout(_), do: {:error, :invalid_timeout}
+
   @doc """
   Returns :ok or {:error, :size_mismatch} for a packed binary of the given
   format. The format MUST be valid (call `format/1` first).
