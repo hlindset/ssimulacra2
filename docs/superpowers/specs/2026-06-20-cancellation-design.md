@@ -125,10 +125,11 @@ cut a normal precompiled release.
 
 ### Elixir layer
 
-**`Ssimulacra2.Token`** — the neutral primitive:
+**`Ssimulacra2.CancellationToken`** — the neutral primitive (named after the
+well-known .NET `CancellationToken` so its purpose is obvious at a glance):
 
 ```elixir
-defmodule Ssimulacra2.Token do
+defmodule Ssimulacra2.CancellationToken do
   defstruct [:resource]
   @type t :: %__MODULE__{resource: reference()}
   def new(), do: %__MODULE__{resource: Native.token_new()}
@@ -145,14 +146,14 @@ immediately.
 new opts (no arity break — `compare/5` already takes opts; `Reference.compare/2`
 grows a `/3`):
 
-- `:cancel` — a `%Ssimulacra2.Token{}` (or absent).
+- `:cancel` — a `%Ssimulacra2.CancellationToken{}` (or absent).
 - `:timeout` — positive integer milliseconds (or absent).
 
 **`Ssimulacra2.Cancellation`** (private) — shared timeout orchestration so both
 call sites are identical:
 
 ```elixir
-# run(cancel :: Token.t() | nil, timeout :: pos_integer() | nil, invoke)
+# run(cancel :: CancellationToken.t() | nil, timeout :: pos_integer() | nil, invoke)
 # invoke.(token_resource_or_nil) -> {:ok, score}
 #                                 | {:error, :cancelled}
 #                                 | {:error, {:failed, msg}}
@@ -161,10 +162,10 @@ call sites are identical:
 
 Timeout orchestration (deterministic, pure Elixir):
 
-1. `token = cancel || Token.new()`.
+1. `token = cancel || CancellationToken.new()`.
 2. Spawn a canceller process:
    - `receive {:done, ref} -> send(parent, {:status, ref, :not_timed_out})`
-   - `after timeout -> Token.cancel(token); send(parent, {:status, ref, :timed_out})`
+   - `after timeout -> CancellationToken.cancel(token); send(parent, {:status, ref, :timed_out})`
 3. Parent runs the NIF (blocks on the dirty scheduler), then
    `send(canceller, {:done, ref})` and reads `{:status, ref, s}`.
 4. Map:
@@ -181,7 +182,8 @@ If both `:cancel` and `:timeout` are given, the timer trips the user's token and
 `:timeout` takes precedence in the mapping.
 
 Validation: `:timeout`, when present, must be a positive integer; `:cancel`, when
-present, must be a `%Token{}`. Reuse the existing `Validate` module conventions.
+present, must be a `%CancellationToken{}`. Reuse the existing `Validate` module
+conventions.
 
 `@type reason` gains `:cancelled | :timeout`. `compare!`, `Reference.compare!`
 raise `Ssimulacra2.Error` on these as on any other reason.
@@ -191,7 +193,7 @@ raise `Ssimulacra2.Error` on these as on any other reason.
 ```
 caller proc ──compare(.., cancel: tok)──▶ dirty scheduler thread (blocked, polling stop.check per strip)
    │
-other proc ──Token.cancel(tok)──▶ token_cancel NIF (normal scheduler) ──▶ SyncStopper store=true
+other proc ──CancellationToken.cancel(tok)──▶ token_cancel NIF (normal scheduler) ──▶ SyncStopper store=true
    │
 dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶ {:error, :cancelled} ──▶ caller unblocks
 ```
@@ -206,7 +208,8 @@ dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶
 
 ## Testing (TDD)
 
-- **Token basics:** `Token.new/0` returns a struct; `cancel/1` returns `:ok`.
+- **Token basics:** `CancellationToken.new/0` returns a struct; `cancel/1`
+  returns `:ok`.
 - **Deterministic `:cancelled`:** pre-cancel a token, then `compare` returns
   `{:error, :cancelled}` quickly (first strip-boundary check).
 - **Cross-process cancel:** run `compare` on a large fixture in a `Task`, cancel
@@ -225,7 +228,7 @@ dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶
 
 - Module docs for `Ssimulacra2` and `Ssimulacra2.Reference`: `:cancel` /
   `:timeout` opts, the `:cancelled` / `:timeout` reasons.
-- `Ssimulacra2.Token` moduledoc: the neutral-primitive model, one-shot
+- `Ssimulacra2.CancellationToken` moduledoc: the neutral-primitive model, one-shot
   semantics, cancel-from-another-process pattern.
 - README: cancellation usage example + the build-from-source note for the
   git-pin window.
