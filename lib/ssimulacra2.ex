@@ -54,7 +54,7 @@ defmodule Ssimulacra2 do
          :ok <- Validate.dims(width, height),
          :ok <- Validate.size(reference, width, height, format),
          :ok <- Validate.size(distorted, width, height, format) do
-      Native.compare(reference, distorted, width, height, format)
+      Native.compare(reference, distorted, width, height, format, nil)
       |> map_native_error()
     end
   end
@@ -72,5 +72,6 @@ defmodule Ssimulacra2 do
   end
 
   defp map_native_error({:ok, score}), do: {:ok, score}
-  defp map_native_error({:error, message}), do: {:error, {:ssimulacra2, message}}
+  defp map_native_error({:error, :cancelled}), do: {:error, :cancelled}
+  defp map_native_error({:error, {:failed, message}}), do: {:error, {:ssimulacra2, message}}
 end

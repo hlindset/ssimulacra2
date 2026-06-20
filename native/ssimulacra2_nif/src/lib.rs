@@ -1,7 +1,29 @@
 use almost_enough::SyncStopper;
-use fast_ssim2::{compute_ssimulacra2, Ssimulacra2Reference, ToLinearRgb};
+use enough::{Stop, Unstoppable};
+use fast_ssim2::{
+    compute_ssimulacra2_strip_with_stop, compute_ssimulacra2_with_stop, Ssimulacra2Error,
+    Ssimulacra2Reference, ToLinearRgb,
+};
 use imgref::{ImgRef, ImgVec};
 use rustler::{Atom, Binary, ResourceArc};
+
+/// Rows per cancellation-check boundary at scale 0. 256 is upstream's
+/// documented memory sweet spot (~bounded peak working set at 40 MP) and
+/// gives ~150 ms cancellation latency at scale 0 on a 36 MP image.
+const STRIP_HEIGHT: u32 = 256;
+
+#[derive(rustler::NifTaggedEnum)]
+enum CompareError {
+    Cancelled,
+    Failed(String),
+}
+
+fn to_compare_error(e: Ssimulacra2Error) -> CompareError {
+    match e {
+        Ssimulacra2Error::Cancelled(_) => CompareError::Cancelled,
+        other => CompareError::Failed(other.to_string()),
+    }
+}
 
 mod atoms {
     rustler::atoms! {
@@ -117,8 +139,38 @@ fn linear_gray(b: &[u8], w: usize, h: usize) -> ImgVec<f32> {
     ImgVec::new(px, w, h)
 }
 
-fn score<S: ToLinearRgb, D: ToLinearRgb>(s: S, d: D) -> Result<f64, String> {
-    compute_ssimulacra2(s, d).map_err(|e| e.to_string())
+// Sub-8px inputs take the non-strip path (which reflect-pads and scores them —
+// preserving the pre-strip behavior); everything else takes the strip path
+// (tight per-strip cancellation latency + bounded peak memory). Both are
+// cancellable.
+fn score<S: ToLinearRgb, D: ToLinearRgb>(
+    s: S,
+    d: D,
+    width: usize,
+    height: usize,
+    stop: &dyn Stop,
+) -> Result<f64, CompareError> {
+    let result = if width < 8 || height < 8 {
+        compute_ssimulacra2_with_stop(s, d, stop)
+    } else {
+        compute_ssimulacra2_strip_with_stop(s, d, STRIP_HEIGHT, stop)
+    };
+    result.map_err(to_compare_error)
+}
+
+fn ref_score<T: ToLinearRgb>(
+    r: &Ssimulacra2Reference,
+    img: T,
+    width: usize,
+    height: usize,
+    stop: &dyn Stop,
+) -> Result<f64, CompareError> {
+    let result = if width < 8 || height < 8 {
+        r.compare_with_stop(img, stop)
+    } else {
+        r.compare_strip_with_stop(img, STRIP_HEIGHT, stop)
+    };
+    result.map_err(to_compare_error)
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
@@ -128,22 +180,29 @@ fn compare(
     width: usize,
     height: usize,
     format: Atom,
-) -> Result<f64, String> {
+    cancel: Option<ResourceArc<StopResource>>,
+) -> Result<f64, CompareError> {
     let (r, d, w, h) = (reference.as_slice(), distorted.as_slice(), width, height);
-    match Format::from_atom(format)? {
-        Format::Rgb888 => score(rgb888(r, w, h), rgb888(d, w, h)),
-        Format::Gray8 => score(gray8(r, w, h), gray8(d, w, h)),
+    let unstoppable = Unstoppable;
+    let stop: &dyn Stop = match &cancel {
+        Some(res) => &res.stopper,
+        None => &unstoppable,
+    };
+    let format = Format::from_atom(format).map_err(CompareError::Failed)?;
+    match format {
+        Format::Rgb888 => score(rgb888(r, w, h), rgb888(d, w, h), w, h, stop),
+        Format::Gray8 => score(gray8(r, w, h), gray8(d, w, h), w, h, stop),
         Format::Rgb16 => {
             let (a, b) = (rgb16(r, w, h), rgb16(d, w, h));
-            score(a.as_ref(), b.as_ref())
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
         Format::LinearRgb => {
             let (a, b) = (linear_rgb(r, w, h), linear_rgb(d, w, h));
-            score(a.as_ref(), b.as_ref())
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
         Format::LinearGray => {
             let (a, b) = (linear_gray(r, w, h), linear_gray(d, w, h));
-            score(a.as_ref(), b.as_ref())
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
     }
 }
@@ -184,19 +243,22 @@ fn reference_compare(
     width: usize,
     height: usize,
     format: Atom,
-) -> Result<f64, String> {
+    cancel: Option<ResourceArc<StopResource>>,
+) -> Result<f64, CompareError> {
     let (d, w, h) = (distorted.as_slice(), width, height);
     let r = &reference.inner;
-    match Format::from_atom(format)? {
-        Format::Rgb888 => r.compare(rgb888(d, w, h)).map_err(|e| e.to_string()),
-        Format::Gray8 => r.compare(gray8(d, w, h)).map_err(|e| e.to_string()),
-        Format::Rgb16 => r.compare(rgb16(d, w, h).as_ref()).map_err(|e| e.to_string()),
-        Format::LinearRgb => r
-            .compare(linear_rgb(d, w, h).as_ref())
-            .map_err(|e| e.to_string()),
-        Format::LinearGray => r
-            .compare(linear_gray(d, w, h).as_ref())
-            .map_err(|e| e.to_string()),
+    let unstoppable = Unstoppable;
+    let stop: &dyn Stop = match &cancel {
+        Some(res) => &res.stopper,
+        None => &unstoppable,
+    };
+    let format = Format::from_atom(format).map_err(CompareError::Failed)?;
+    match format {
+        Format::Rgb888 => ref_score(r, rgb888(d, w, h), w, h, stop),
+        Format::Gray8 => ref_score(r, gray8(d, w, h), w, h, stop),
+        Format::Rgb16 => ref_score(r, rgb16(d, w, h).as_ref(), w, h, stop),
+        Format::LinearRgb => ref_score(r, linear_rgb(d, w, h).as_ref(), w, h, stop),
+        Format::LinearGray => ref_score(r, linear_gray(d, w, h).as_ref(), w, h, stop),
     }
 }
 

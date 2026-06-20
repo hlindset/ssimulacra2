@@ -40,8 +40,8 @@ defmodule Ssimulacra2.Reference do
   @spec compare(t(), Ssimulacra2.image_data()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
   def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
     with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format) do
-      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format)
-      |> map_native()
+      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format, nil)
+      |> map_compare()
     end
   end
 
@@ -65,4 +65,8 @@ defmodule Ssimulacra2.Reference do
 
   defp map_native({:ok, value}), do: {:ok, value}
   defp map_native({:error, message}) when is_binary(message), do: {:error, {:ssimulacra2, message}}
+
+  defp map_compare({:ok, value}), do: {:ok, value}
+  defp map_compare({:error, :cancelled}), do: {:error, :cancelled}
+  defp map_compare({:error, {:failed, message}}), do: {:error, {:ssimulacra2, message}}
 end
