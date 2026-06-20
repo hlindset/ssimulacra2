@@ -23,6 +23,13 @@ defmodule Ssimulacra2 do
   (`u16`, `f32`) are **native-endian** — e.g. `<<v::native-16>>` /
   `<<v::native-float-32>>`. A binary's size must equal
   `width * height * channels * bytes_per_element` for its format.
+
+  ## Cancellation
+
+  `compare/5` and `Ssimulacra2.Reference.compare/3` accept `cancel:` (an
+  `Ssimulacra2.CancellationToken`) and `timeout:` (milliseconds) to abort a
+  long comparison mid-computation, returning `{:error, :cancelled}` or
+  `{:error, :timeout}`. See `Ssimulacra2.CancellationToken`.
   """
 
   alias Ssimulacra2.{Cancellation, Native, Validate}
@@ -47,6 +54,17 @@ defmodule Ssimulacra2 do
   formats are `:rgb16`, `:linear_rgb`, `:gray8`, and `:linear_gray`.
 
   Returns `{:ok, score}` or `{:error, reason}`.
+
+  ## Cancellation
+
+  Pass `cancel:` an `Ssimulacra2.CancellationToken` to abort the comparison
+  from another process (e.g. on client disconnect) — the call returns
+  `{:error, :cancelled}`. Pass `timeout:` a positive integer of milliseconds to
+  bound the wall-clock time — the call returns `{:error, :timeout}` if it
+  exceeds that. Both may be combined; cancellation is checked at strip
+  boundaries, so the CPU is freed promptly without leaving the dirty scheduler.
+
+  Invalid options return `{:error, :invalid_cancel}` / `{:error, :invalid_timeout}`.
   """
   @spec compare(image_data(), image_data(), pos_integer(), pos_integer(), keyword()) ::
           {:ok, float()} | {:error, reason()}
