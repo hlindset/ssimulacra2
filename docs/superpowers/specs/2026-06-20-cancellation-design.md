@@ -100,11 +100,16 @@ almost-enough = "0.4.4"
 
 Regenerate `Cargo.lock` (pins the exact SHA → reproducible).
 
-This stays on a feature branch / PR. While git-pinned, the crate cannot go
-through the `RustlerPrecompiled` download path, so **consumers build from
-source** during this window (`SSIMULACRA2_BUILD=1` or `force_build: true`). Exit
-step when upstream cuts a release: swap `git` → `version`, regenerate the lock,
-cut a normal precompiled release.
+The git-SHA pin is a **development-only** state on this branch — it lets us build
+and test (and let ImagePipe build) against cancellation ahead of an upstream
+release. The PR is **not merged** until upstream cuts a `fast-ssim2` release with
+cooperative cancellation; at that point the dependency is swapped `git` →
+`version`, `Cargo.lock` is regenerated, and a normal precompiled release is cut.
+
+Because the pin never reaches `main`, this temporary build situation is **not
+documented** to users: the README's existing precompiled-NIF / build-from-source
+wording describes the merged, released state and stays as-is. (During local dev
+on the branch, `config/config.exs` already forces a source build in `:dev`/`:test`.)
 
 ### Rust / NIF layer (`native/ssimulacra2_nif/src/lib.rs`)
 
@@ -249,8 +254,9 @@ dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶
   `:timeout` opts, the `:cancelled` / `:timeout` reasons.
 - `Ssimulacra2.CancellationToken` moduledoc: the neutral-primitive model, one-shot
   semantics, cancel-from-another-process pattern.
-- README: cancellation usage example + the build-from-source note for the
-  git-pin window.
+- README: cancellation usage examples (timeout, external cancel, shared-token
+  search loop). No git-pin / build-from-source note — that branch state is never
+  merged (see Dependency & build/release strategy).
 
 ## Open risks
 

@@ -41,6 +41,13 @@
 - Modify: `native/ssimulacra2_nif/Cargo.toml`
 - Modify: `native/ssimulacra2_nif/Cargo.lock` (regenerated)
 
+> **Branch-only pin — do not merge as-is.** The git-SHA dependency exists only so
+> this branch (and ImagePipe) can build against cancellation before an upstream
+> release. The PR is merged **only after** `fast-ssim2` cuts a release with
+> cooperative cancellation, by swapping `git = …, rev = …` → `version = "0.x"`,
+> regenerating `Cargo.lock`, and cutting a normal precompiled release. This
+> temporary state is never documented to users.
+
 - [ ] **Step 1: Edit the dependencies**
 
 In `native/ssimulacra2_nif/Cargo.toml`, replace the `fast-ssim2` line and add the two token crates:
@@ -1152,25 +1159,15 @@ In `lib/ssimulacra2/reference.ex`, update `compare/3`'s `@doc`:
   Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
 ```
 
-- [ ] **Step 3: Update the README — cancellation section + fix the precompiled/build notes**
+- [ ] **Step 3: Add the cancellation section to the README**
 
-Three edits in `README.md`:
-
-**(a) Fix the misleading intro.** The current opening (lines 3-6) advertises
-precompiled NIFs with no Rust toolchain. While git-pinned that is not true.
-Replace the sentence "Published with precompiled NIFs, so the Rust toolchain is
-not required if you're on a covered architecture + platform." with:
-
-```
-> **Pre-release note:** this version pins `fast-ssim2` to an unreleased git
-> revision (for cooperative cancellation, pending an upstream release), so it is
-> **built from source** — set `SSIMULACRA2_BUILD=1` or
-> `config :ssimulacra2, force_build: true`, and ensure a Rust toolchain (≥ 1.89)
-> is available. Precompiled NIFs return once `fast-ssim2` cuts a release.
-```
-
-**(b) Add the cancellation section** after the Usage examples (after the Vix
-subsection):
+Add the section below after the Usage examples (after the Vix subsection). Do
+NOT document the temporary git-SHA build situation: this branch pins
+`fast-ssim2` to a git revision only for development, and the PR is not merged
+until upstream cuts a release with cooperative cancellation, at which point the
+dependency is swapped to the version number (see Task 1). So the README's
+existing precompiled-NIF / build-from-source wording stays as-is — it describes
+the merged, released state and is correct then.
 
 ```markdown
 ### Cancellation & timeouts
@@ -1211,15 +1208,6 @@ end
 ​```
 
 A token is single-use: once cancelled it stays cancelled.
-```
-
-**(c) Amend the "Building from source" section** (currently "only needed if…")
-to note that during the git-pin window building from source is **required**, not
-optional. Prepend to that section:
-
-```
-During the pre-release git-pin window above, building from source is required
-(there are no precompiled artifacts for the git-pinned `fast-ssim2`).
 ```
 
 (Remove the zero-width space characters shown around the code fences — they are
