@@ -10,8 +10,19 @@ if Code.ensure_loaded?(Vix.Vips.Image) do
 
     alias Vix.Vips.{Image, Operation}
 
-    @doc "Compare two Vix images with `Ssimulacra2.compare/5`."
+    @doc """
+    Compare a Vix candidate against a reference.
+
+    Given two `Image.t()`s, the reference pyramid is rebuilt every call. Given a
+    precomputed `Ssimulacra2.Reference` as the first argument, it is reused
+    against the candidate — coerce the candidate to the reference's format and
+    compare. Use the precompute form when comparing many candidates against one
+    original.
+    """
     @spec compare(Image.t(), Image.t()) :: {:ok, float()} | {:error, term()}
+    @spec compare(Ssimulacra2.Reference.t(), Image.t()) :: {:ok, float()} | {:error, term()}
+    def compare(reference, distorted)
+
     def compare(%Image{} = reference, %Image{} = distorted) do
       format = pair_format(reference, distorted)
 
@@ -21,6 +32,12 @@ if Code.ensure_loaded?(Vix.Vips.Image) do
       else
         {:ok, {_bin, _w2, _h2}} -> {:error, :dimension_mismatch}
         other -> other
+      end
+    end
+
+    def compare(%Ssimulacra2.Reference{format: format} = reference, %Image{} = distorted) do
+      with {:ok, {bin, _w, _h}} <- coerce(distorted, format) do
+        Ssimulacra2.Reference.compare(reference, bin)
       end
     end
 

@@ -57,6 +57,29 @@ defmodule Ssimulacra2.VixTest do
     assert score > 90.0
   end
 
+  test "compare/2 reuses a precomputed reference against a Vix candidate" do
+    bin = gradient_rgb888(64, 64)
+    {:ok, img8} = Image.new_from_binary(bin, 64, 64, 3, :VIPS_FORMAT_UCHAR)
+    img8 = Operation.copy!(img8, interpretation: :VIPS_INTERPRETATION_sRGB)
+
+    {:ok, ref} = Ssimulacra2.Vix.reference(img8)
+
+    # Identical candidate against the reference scores ~100.
+    assert {:ok, identical} = Ssimulacra2.Vix.compare(ref, img8)
+    assert identical > 99.0
+
+    # A lightly degraded candidate beats a heavily degraded one.
+    light = Operation.gaussblur!(img8, 0.5)
+    heavy = Operation.gaussblur!(img8, 3.0)
+    assert {:ok, light_score} = Ssimulacra2.Vix.compare(ref, light)
+    assert {:ok, heavy_score} = Ssimulacra2.Vix.compare(ref, heavy)
+    assert light_score > heavy_score
+
+    # The precompute path matches the rebuild-every-call path within epsilon.
+    assert {:ok, pair_score} = Ssimulacra2.Vix.compare(img8, heavy)
+    assert_in_delta heavy_score, pair_score, 0.01
+  end
+
   # A deterministic gradient RGB888 binary (varies per pixel).
   defp gradient_rgb888(width, height) do
     for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
