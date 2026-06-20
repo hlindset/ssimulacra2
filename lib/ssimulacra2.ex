@@ -25,7 +25,7 @@ defmodule Ssimulacra2 do
   `width * height * channels * bytes_per_element` for its format.
   """
 
-  alias Ssimulacra2.{Native, Validate}
+  alias Ssimulacra2.{Cancellation, Native, Validate}
 
   @type image_data :: binary()
   @type reason ::
@@ -33,6 +33,8 @@ defmodule Ssimulacra2 do
           | :size_mismatch
           | :dimension_mismatch
           | :unknown_format
+          | :invalid_cancel
+          | :cancelled
           | {:ssimulacra2, String.t()}
 
   @doc """
@@ -49,13 +51,16 @@ defmodule Ssimulacra2 do
   def compare(reference, distorted, width, height, opts \\ [])
       when is_binary(reference) and is_binary(distorted) do
     format = Keyword.get(opts, :format, :rgb888)
+    cancel = Keyword.get(opts, :cancel)
 
     with :ok <- Validate.format(format),
          :ok <- Validate.dims(width, height),
          :ok <- Validate.size(reference, width, height, format),
-         :ok <- Validate.size(distorted, width, height, format) do
-      Native.compare(reference, distorted, width, height, format, nil)
-      |> map_native_error()
+         :ok <- Validate.size(distorted, width, height, format),
+         :ok <- Validate.cancel(cancel) do
+      Cancellation.run(cancel, nil, fn resource ->
+        Native.compare(reference, distorted, width, height, format, resource)
+      end)
     end
   end
 
@@ -71,7 +76,4 @@ defmodule Ssimulacra2 do
     end
   end
 
-  defp map_native_error({:ok, score}), do: {:ok, score}
-  defp map_native_error({:error, :cancelled}), do: {:error, :cancelled}
-  defp map_native_error({:error, {:failed, message}}), do: {:error, {:ssimulacra2, message}}
 end

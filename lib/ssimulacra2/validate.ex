@@ -21,6 +21,11 @@ defmodule Ssimulacra2.Validate do
   def format(fmt) when is_map_key(@formats, fmt), do: :ok
   def format(_), do: {:error, :unknown_format}
 
+  @doc "Returns :ok or {:error, :invalid_cancel}."
+  def cancel(nil), do: :ok
+  def cancel(%Ssimulacra2.CancellationToken{}), do: :ok
+  def cancel(_), do: {:error, :invalid_cancel}
+
   @doc """
   Returns :ok or {:error, :size_mismatch} for a packed binary of the given
   format. The format MUST be valid (call `format/1` first).

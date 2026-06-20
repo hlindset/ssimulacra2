@@ -10,7 +10,7 @@ defmodule Ssimulacra2.Reference do
   comparing many encodings against one original.
   """
 
-  alias Ssimulacra2.{Native, Validate}
+  alias Ssimulacra2.{Cancellation, Native, Validate}
 
   @enforce_keys [:resource, :width, :height, :format]
   defstruct [:resource, :width, :height, :format]
@@ -36,12 +36,24 @@ defmodule Ssimulacra2.Reference do
     end
   end
 
-  @doc "Compare a candidate against the precomputed reference (same format as the reference)."
-  @spec compare(t(), Ssimulacra2.image_data()) :: {:ok, float()} | {:error, Ssimulacra2.reason()}
-  def compare(%__MODULE__{} = ref, distorted) when is_binary(distorted) do
-    with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format) do
-      Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format, nil)
-      |> map_compare()
+  @doc """
+  Compare a candidate against the precomputed reference (same format as the
+  reference).
+
+  Accepts `cancel:` (an `Ssimulacra2.CancellationToken`) and `timeout:`
+  (milliseconds) to abort an in-flight comparison; see `Ssimulacra2.compare/5`.
+  Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
+  """
+  @spec compare(t(), Ssimulacra2.image_data(), keyword()) ::
+          {:ok, float()} | {:error, Ssimulacra2.reason()}
+  def compare(%__MODULE__{} = ref, distorted, opts \\ []) when is_binary(distorted) do
+    cancel = Keyword.get(opts, :cancel)
+
+    with :ok <- Validate.size(distorted, ref.width, ref.height, ref.format),
+         :ok <- Validate.cancel(cancel) do
+      Cancellation.run(cancel, nil, fn resource ->
+        Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format, resource)
+      end)
     end
   end
 
@@ -54,10 +66,10 @@ defmodule Ssimulacra2.Reference do
     end
   end
 
-  @doc "Like `compare/2` but returns the bare score or raises `Ssimulacra2.Error`."
-  @spec compare!(t(), Ssimulacra2.image_data()) :: float()
-  def compare!(%__MODULE__{} = ref, distorted) do
-    case compare(ref, distorted) do
+  @doc "Like `compare/3` but returns the bare score or raises `Ssimulacra2.Error`."
+  @spec compare!(t(), Ssimulacra2.image_data(), keyword()) :: float()
+  def compare!(%__MODULE__{} = ref, distorted, opts \\ []) do
+    case compare(ref, distorted, opts) do
       {:ok, score} -> score
       {:error, reason} -> raise Ssimulacra2.Error, reason: reason
     end
@@ -65,8 +77,4 @@ defmodule Ssimulacra2.Reference do
 
   defp map_native({:ok, value}), do: {:ok, value}
   defp map_native({:error, message}) when is_binary(message), do: {:error, {:ssimulacra2, message}}
-
-  defp map_compare({:ok, value}), do: {:ok, value}
-  defp map_compare({:error, :cancelled}), do: {:error, :cancelled}
-  defp map_compare({:error, {:failed, message}}), do: {:error, {:ssimulacra2, message}}
 end
