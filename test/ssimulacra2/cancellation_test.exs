@@ -43,6 +43,10 @@ defmodule Ssimulacra2.CancellationTest do
     # 3000x3000 (~9 MP): the metric runs for well over the ~10 ms head start
     # below, so the cancel reliably lands mid-flight on idle CI too.
     big = Fixtures.solid(3000, 3000, {123, 50, 200})
+
+    # Baseline: how long a full (uncancelled) compare of this image takes.
+    {full_us, {:ok, _}} = :timer.tc(fn -> Ssimulacra2.compare(big, big, 3000, 3000) end)
+
     tok = CancellationToken.new()
     parent = self()
 
@@ -56,7 +60,42 @@ defmodule Ssimulacra2.CancellationTest do
     Process.sleep(10)
     CancellationToken.cancel(tok)
 
+    {abort_us, result} = :timer.tc(fn -> Task.await(task, 30_000) end)
+    assert {:error, :cancelled} = result
+    # Proves the abort was mid-flight, not a run-to-completion: it returns in
+    # well under half a full compute (measured ~0.1x; the bound scales with the
+    # machine because both timings do).
+    assert abort_us < full_us / 2
+  end
+
+  test "cancelling from another process aborts an in-flight Reference.compare" do
+    big = Fixtures.solid(3000, 3000, {123, 50, 200})
+    {:ok, ref} = Reference.new(big, 3000, 3000)
+    tok = CancellationToken.new()
+    parent = self()
+
+    task =
+      Task.async(fn ->
+        send(parent, :started)
+        Reference.compare(ref, big, cancel: tok)
+      end)
+
+    assert_receive :started, 1000
+    Process.sleep(10)
+    CancellationToken.cancel(tok)
+
     assert {:error, :cancelled} = Task.await(task, 30_000)
+  end
+
+  test "a cancelled token aborts every subsequent comparison" do
+    a = Fixtures.gradient(64, 64)
+    b = Fixtures.solid(64, 64, {200, 100, 50})
+    tok = CancellationToken.new()
+    :ok = CancellationToken.cancel(tok)
+
+    # One token covers a whole batch: once tripped, all later compares abort.
+    assert {:error, :cancelled} = Ssimulacra2.compare(a, b, 64, 64, cancel: tok)
+    assert {:error, :cancelled} = Ssimulacra2.compare(a, b, 64, 64, cancel: tok)
   end
 
   test "compare!/5 raises on cancellation" do
@@ -127,5 +166,7 @@ defmodule Ssimulacra2.CancellationTest do
     img = Fixtures.gradient(64, 64)
     assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: 0)
     assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: -5)
+    assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: 1.5)
+    assert {:error, :invalid_timeout} = Ssimulacra2.compare(img, img, 64, 64, timeout: "100")
   end
 end

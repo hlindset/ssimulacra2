@@ -15,9 +15,9 @@ defmodule Ssimulacra2.StripParityTest do
   use ExUnit.Case, async: true
   alias Ssimulacra2.{Fixtures, Reference}
 
-  # Captured from the non-strip build (Task 4, Step 1).
-  @golden_oneshot -163.143092
-  @golden_batch -163.143092
+  # Captured from the non-strip build (Task 4, Step 1) at full f64 precision.
+  @golden_oneshot -163.14309657472538
+  @golden_batch -163.14309657472538
 
   test "one-shot compare/5 matches the locked score" do
     ref = Fixtures.gradient(64, 64)
@@ -40,9 +40,9 @@ defmodule Ssimulacra2.StripParityTest do
   test "an image smaller than 8px still scores" do
     img = Fixtures.gradient(6, 6)
     assert {:ok, score} = Ssimulacra2.compare(img, img, 6, 6)
-    assert score > 99.0
+    assert_in_delta score, 100.0, 1.0e-6
     {:ok, ref} = Reference.new(img, 6, 6)
     assert {:ok, batch} = Reference.compare(ref, img)
-    assert batch > 99.0
+    assert_in_delta batch, 100.0, 1.0e-6
   end
 end
