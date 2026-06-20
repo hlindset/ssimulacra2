@@ -37,15 +37,12 @@ design wires that cancellation through to Elixir so an in-flight `compare` /
 - Exposing `strip_height` as a public option (YAGNI — internal constant for now).
 - Progress reporting / partial scores.
 
-## Behavior change
+## No behavior change for small images
 
-Switching to the strip path changes one edge case: the strip API rejects images
-smaller than 8 px on a side (`Ssimulacra2Error::InvalidImageSize`), whereas the
-old non-strip path reflect-padded them up to 8 px and scored them. So a `<8px`
-comparison now returns `{:error, {:ssimulacra2, _}}` instead of a score. This is
-acceptable (pre-release v0.1; no caller or test scores a sub-8px image — the
-smallest successful score in the suite is 16×16) and must be documented on both
-`Ssimulacra2.compare/5` and `Ssimulacra2.Reference.compare/3`.
+The size-dispatch (decision 3) deliberately preserves the current `<8px`
+behavior: those inputs still reflect-pad to 8px and score, because they take the
+non-strip `*_with_stop` path. No regression. A test locks this (a `<8px`
+comparison still returns `{:ok, score}`).
 
 ## Key constraint
 
@@ -80,10 +77,12 @@ Strip processing also bounds peak working memory (a bonus on 36 MP images).
    (disconnect monitor trips it; search deadline trips it).
 2. **`:timeout` implementation:** a pure-Elixir canceller process. No Rust timer
    threads; the NIF stays minimal (one optional token arg).
-3. **Strip policy:** **always** use the strip-with-stop variants (Unstoppable on
-   the no-cancel path). Single code path, tight latency + lower peak memory for
-   all callers. Safe because this is pre-release v0.1 (backward compat is not a
-   constraint) and a score-identity test gates it.
+3. **Strip policy:** use the strip-with-stop variants for images `≥8px` on both
+   sides (tight latency + lower peak memory on the 36 MP hot path), and the
+   non-strip `*_with_stop` variants for `<8px` (which reflect-pad and score them,
+   exactly as today, and are still cancellable). This avoids a regression: the
+   strip path *rejects* sub-8px images, the non-strip path does not. A
+   score-identity test gates the `≥8px` strip path against the pre-strip scores.
 4. **Default strip height:** `256` (upstream's documented memory sweet spot;
    ~150 ms cancellation latency at scale 0 on a 36 MP image). Internal constant.
 
@@ -116,8 +115,14 @@ cut a normal precompiled release.
 - `compare` / `reference_compare` gain a trailing
   `cancel: Option<ResourceArc<StopResource>>` arg (Elixir `nil` → `None`).
   Resolve `&dyn enough::Stop` = the token's `SyncStopper`, else
-  `&enough::Unstoppable`. Call the strip-with-stop variant with the internal
-  `STRIP_HEIGHT` constant (256).
+  `&enough::Unstoppable`. **Size-dispatch** the compute call (both branches are
+  cancellable):
+  - `width < 8 || height < 8` → the non-strip `compute_ssimulacra2_with_stop` /
+    `compare_with_stop` (these reflect-pad sub-8px inputs up to 8px and score
+    them — exactly today's behavior; polling is per-scale, which is irrelevant
+    for a tiny image).
+  - otherwise → the strip variant with the internal `STRIP_HEIGHT` constant
+    (256) — tight per-strip latency and bounded peak memory on large images.
 - Error mapping via a `rustler::NifTaggedEnum`:
 
   ```rust
@@ -228,10 +233,12 @@ dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶
   from the test process, assert `{:error, :cancelled}` and that it returned well
   before full completion.
 - **`:timeout`:** large synthetic image + `timeout: 1` → `{:error, :timeout}`.
-- **Score-identity gate:** strip-with-stop (Unstoppable) score == the current
-  non-strip golden for all fixtures and formats. This is what makes "always
-  strip" safe; update goldens only if upstream strip math is intentionally
-  different (investigate before accepting any drift).
+- **Score-identity gate (≥8px):** strip-with-stop (Unstoppable) score == the
+  current non-strip golden. This is what makes the strip switch safe for the
+  `≥8px` path (rgb888 is a sound proxy — all formats convert to linear RGB before
+  the strip walk). Investigate any drift before accepting it.
+- **Small-image no-regression:** a `<8px` comparison still returns `{:ok, score}`
+  (it takes the non-strip cancellable path).
 - **Completed-with-timeout:** generous `:timeout` returns `{:ok, score}` equal to
   the no-timeout score.
 - **Reference mirrors:** all of the above for `Reference.compare/3`.
@@ -247,10 +254,11 @@ dirty thread sees stop at next strip boundary ──▶ Err(Cancelled) ──▶
 
 ## Open risks
 
-- **Strip vs non-strip score identity.** Expected identical (strip is a
+- **Strip vs non-strip score identity (≥8px).** Expected identical (strip is a
   streaming reorganization of the same math with halo rows), but must be proven
-  by the score-identity gate before "always strip" is accepted. Fallback if it
-  drifts: strip only when cancellation is requested.
-- **`SyncStopper` API surface.** Confirm `new/0`, `cancel/0`, and `enough::Stop`
+  by the score-identity gate before the strip switch is accepted. Fallback if it
+  drifts: use strip only when cancellation is requested (the size-dispatch shape
+  already separates the two paths cleanly).
+- **`SyncStopper` API surface.** Confirm `new()`, `cancel()`, and `enough::Stop`
   impl at the pinned SHA during implementation (docs assert all three).
 ```

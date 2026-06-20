@@ -310,7 +310,7 @@ captured in Step 1 for `<ONESHOT>` and `<BATCH>`:
 defmodule Ssimulacra2.StripParityTest do
   @moduledoc """
   Locks the score for a fixed input so switching the NIF to the strip-with-stop
-  algorithm is proven score-identical (the design's "always strip" gate). The
+  algorithm is proven score-identical for ≥8px inputs (the strip-switch gate). The
   golden numbers were captured from the pre-strip build; a change larger than
   the delta means the strip path is not equivalent — investigate before
   accepting any drift.
@@ -341,6 +341,18 @@ defmodule Ssimulacra2.StripParityTest do
     {:ok, ref} = Reference.new(ref_img, 64, 64)
     {:ok, score} = Reference.compare(ref, cand)
     assert_in_delta score, @golden_batch, 1.0e-4
+  end
+
+  # Locks the no-regression guarantee for sub-8px images: they must still score
+  # (via the non-strip cancellable path), not error. Passes both before the
+  # strip switch (non-strip everywhere) and after (size-dispatch).
+  test "an image smaller than 8px still scores" do
+    img = Fixtures.gradient(6, 6)
+    assert {:ok, score} = Ssimulacra2.compare(img, img, 6, 6)
+    assert score > 99.0
+    {:ok, ref} = Reference.new(img, 6, 6)
+    assert {:ok, batch} = Reference.compare(ref, img)
+    assert batch > 99.0
   end
 end
 ```
@@ -378,7 +390,9 @@ These were verified against the source at rev `093aa6f…` during planning; conf
 they still hold before writing the match arms (e.g. `grep` the crate source under
 `~/.cargo/registry/.../fast-ssim2-*/` after the Task 1 build, or read it on GitHub):
 - `compute_ssimulacra2_strip_with_stop<S, D>(source, distorted, strip_height: u32, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>`
+- `compute_ssimulacra2_with_stop<S, D>(source, distorted, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>` (non-strip; reflect-pads sub-8px inputs)
 - `Ssimulacra2Reference::compare_strip_with_stop<T: ToLinearRgb>(&self, distorted: T, strip_height: u32, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>`
+- `Ssimulacra2Reference::compare_with_stop<T: ToLinearRgb>(&self, distorted: T, stop: &dyn enough::Stop) -> Result<f64, Ssimulacra2Error>` (non-strip; reflect-pads)
 - `Ssimulacra2Error::Cancelled(enough::StopReason)` (one-field tuple variant; enum is `#[non_exhaustive]`)
 - `almost_enough::SyncStopper::new()` and `.cancel()`; `SyncStopper: enough::Stop`
 
@@ -394,7 +408,8 @@ fully-qualified) and the `use almost_enough::SyncStopper;` added in Task 2:
 
 ```rust
 use fast_ssim2::{
-    compute_ssimulacra2_strip_with_stop, Ssimulacra2Error, Ssimulacra2Reference, ToLinearRgb,
+    compute_ssimulacra2_strip_with_stop, compute_ssimulacra2_with_stop, Ssimulacra2Error,
+    Ssimulacra2Reference, ToLinearRgb,
 };
 use enough::{Stop, Unstoppable};
 ```
@@ -425,17 +440,45 @@ fn to_compare_error(e: Ssimulacra2Error) -> CompareError {
 }
 ```
 
-- [ ] **Step 2: Rewrite the `score` helper to take a stop token**
+- [ ] **Step 2: Rewrite the `score` helper to take a stop token and size-dispatch**
 
-Replace the existing `score` fn:
+Replace the existing `score` fn. Sub-8px inputs take the non-strip path (which
+reflect-pads and scores them — preserving today's behavior); everything else
+takes the strip path (tight latency + bounded memory). Both are cancellable.
 
 ```rust
 fn score<S: ToLinearRgb, D: ToLinearRgb>(
     s: S,
     d: D,
+    width: usize,
+    height: usize,
     stop: &dyn Stop,
 ) -> Result<f64, CompareError> {
-    compute_ssimulacra2_strip_with_stop(s, d, STRIP_HEIGHT, stop).map_err(to_compare_error)
+    let result = if width < 8 || height < 8 {
+        compute_ssimulacra2_with_stop(s, d, stop)
+    } else {
+        compute_ssimulacra2_strip_with_stop(s, d, STRIP_HEIGHT, stop)
+    };
+    result.map_err(to_compare_error)
+}
+```
+
+Also add the reference-side equivalent (used by `reference_compare` in Step 4):
+
+```rust
+fn ref_score<T: ToLinearRgb>(
+    r: &Ssimulacra2Reference,
+    img: T,
+    width: usize,
+    height: usize,
+    stop: &dyn Stop,
+) -> Result<f64, CompareError> {
+    let result = if width < 8 || height < 8 {
+        r.compare_with_stop(img, stop)
+    } else {
+        r.compare_strip_with_stop(img, STRIP_HEIGHT, stop)
+    };
+    result.map_err(to_compare_error)
 }
 ```
 
@@ -461,19 +504,19 @@ fn compare(
     };
     let format = Format::from_atom(format).map_err(CompareError::Failed)?;
     match format {
-        Format::Rgb888 => score(rgb888(r, w, h), rgb888(d, w, h), stop),
-        Format::Gray8 => score(gray8(r, w, h), gray8(d, w, h), stop),
+        Format::Rgb888 => score(rgb888(r, w, h), rgb888(d, w, h), w, h, stop),
+        Format::Gray8 => score(gray8(r, w, h), gray8(d, w, h), w, h, stop),
         Format::Rgb16 => {
             let (a, b) = (rgb16(r, w, h), rgb16(d, w, h));
-            score(a.as_ref(), b.as_ref(), stop)
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
         Format::LinearRgb => {
             let (a, b) = (linear_rgb(r, w, h), linear_rgb(d, w, h));
-            score(a.as_ref(), b.as_ref(), stop)
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
         Format::LinearGray => {
             let (a, b) = (linear_gray(r, w, h), linear_gray(d, w, h));
-            score(a.as_ref(), b.as_ref(), stop)
+            score(a.as_ref(), b.as_ref(), w, h, stop)
         }
     }
 }
@@ -502,21 +545,11 @@ fn reference_compare(
     };
     let format = Format::from_atom(format).map_err(CompareError::Failed)?;
     match format {
-        Format::Rgb888 => r
-            .compare_strip_with_stop(rgb888(d, w, h), STRIP_HEIGHT, stop)
-            .map_err(to_compare_error),
-        Format::Gray8 => r
-            .compare_strip_with_stop(gray8(d, w, h), STRIP_HEIGHT, stop)
-            .map_err(to_compare_error),
-        Format::Rgb16 => r
-            .compare_strip_with_stop(rgb16(d, w, h).as_ref(), STRIP_HEIGHT, stop)
-            .map_err(to_compare_error),
-        Format::LinearRgb => r
-            .compare_strip_with_stop(linear_rgb(d, w, h).as_ref(), STRIP_HEIGHT, stop)
-            .map_err(to_compare_error),
-        Format::LinearGray => r
-            .compare_strip_with_stop(linear_gray(d, w, h).as_ref(), STRIP_HEIGHT, stop)
-            .map_err(to_compare_error),
+        Format::Rgb888 => ref_score(r, rgb888(d, w, h), w, h, stop),
+        Format::Gray8 => ref_score(r, gray8(d, w, h), w, h, stop),
+        Format::Rgb16 => ref_score(r, rgb16(d, w, h).as_ref(), w, h, stop),
+        Format::LinearRgb => ref_score(r, linear_rgb(d, w, h).as_ref(), w, h, stop),
+        Format::LinearGray => ref_score(r, linear_gray(d, w, h).as_ref(), w, h, stop),
     }
 }
 ```
@@ -1090,10 +1123,6 @@ In `lib/ssimulacra2.ex`, update the `compare/5` `@doc` to describe the new opts
   bound the wall-clock time — the call returns `{:error, :timeout}` if it
   exceeds that. Both may be combined; cancellation is checked at strip
   boundaries, so the CPU is freed promptly without leaving the dirty scheduler.
-
-  Note: images smaller than 8 px on a side now return
-  `{:error, {:ssimulacra2, _}}` rather than being upscaled-by-mirroring and
-  scored.
 ```
 
 - [ ] **Step 2: Document the options on `Reference.compare/3`**
@@ -1104,10 +1133,6 @@ In `lib/ssimulacra2/reference.ex`, update `compare/3`'s `@doc`:
   Accepts `cancel:` (an `Ssimulacra2.CancellationToken`) and `timeout:`
   (milliseconds) to abort an in-flight comparison; see `Ssimulacra2.compare/5`.
   Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
-
-  Note: candidates smaller than 8 px on a side now return
-  `{:error, {:ssimulacra2, _}}` rather than being scored (see
-  `Ssimulacra2.compare/5`).
 ```
 
 - [ ] **Step 3: Add a cancellation section to the README**
