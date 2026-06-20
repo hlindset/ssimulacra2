@@ -1,9 +1,11 @@
+use almost_enough::SyncStopper;
 use fast_ssim2::{compute_ssimulacra2, Ssimulacra2Reference, ToLinearRgb};
 use imgref::{ImgRef, ImgVec};
 use rustler::{Atom, Binary, ResourceArc};
 
 mod atoms {
     rustler::atoms! {
+        ok,
         rgb888,
         rgb16,
         linear_rgb,
@@ -15,6 +17,29 @@ mod atoms {
 #[rustler::nif]
 fn nif_loaded() -> bool {
     true
+}
+
+struct StopResource {
+    stopper: SyncStopper,
+}
+
+#[rustler::resource_impl]
+impl rustler::Resource for StopResource {}
+
+/// Create a fresh, live cancellation token. Regular (non-dirty) NIF.
+#[rustler::nif]
+fn token_new() -> ResourceArc<StopResource> {
+    ResourceArc::new(StopResource {
+        stopper: SyncStopper::new(),
+    })
+}
+
+/// Trip a cancellation token. Regular NIF — runs instantly on a normal
+/// scheduler, so it can cancel a token while a dirty `compare` blocks.
+#[rustler::nif]
+fn token_cancel(token: ResourceArc<StopResource>) -> Atom {
+    token.stopper.cancel();
+    atoms::ok()
 }
 
 enum Format {
