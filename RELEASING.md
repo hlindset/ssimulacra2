@@ -36,14 +36,19 @@ able to load the NIF.
    to `## [<version>] - <YYYY-MM-DD>`, add a fresh empty `## [Unreleased]` above
    it, and update the link references at the bottom.
 
-4. **Verify the build is clean:**
+4. **Verify the build is clean** (mirrors [CI](.github/workflows/ci.yml)):
 
    ```bash
    mise exec -- mix deps.get
+   mise exec -- cargo fmt --manifest-path native/ssimulacra2_nif/Cargo.toml --check
    mise exec -- mix format --check-formatted
    SSIMULACRA2_BUILD=1 mise exec -- mix compile --warnings-as-errors --force
    mise exec -- mix test --include vix
    ```
+
+   The `--include vix` run needs `libvips` installed locally; drop it (run plain
+   `mise exec -- mix test`) if you don't have libvips and are confident the Vix
+   helper is untouched.
 
 5. **Commit, tag, and push the tag** — the tag triggers the precompile workflow:
 

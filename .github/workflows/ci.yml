@@ -10,8 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v4
+      - name: Check Rust formatting
+        run: mise exec -- cargo fmt --manifest-path native/ssimulacra2_nif/Cargo.toml --check
       - name: Install deps
         run: mise exec -- mix deps.get
+      - name: Check Elixir formatting
+        run: mise exec -- mix format --check-formatted
       - name: Compile (warnings as errors)
         run: mise exec -- mix compile --warnings-as-errors
         env:
