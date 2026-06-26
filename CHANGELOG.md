@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-26
+
 ### Added
 
 - `Ssimulacra2.compare/5` and `compare!/5` — compute the SSIMULACRA2 score
@@ -35,4 +37,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Scores are "SSIMULACRA2 as computed by `fast-ssim2`" and have not been
   bit-exactly validated against the canonical Cloudinary/libjxl reference.
 
-[Unreleased]: https://github.com/hlindset/ssimulacra2/commits/main
+[Unreleased]: https://github.com/hlindset/ssimulacra2/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hlindset/ssimulacra2/releases/tag/v0.1.0
