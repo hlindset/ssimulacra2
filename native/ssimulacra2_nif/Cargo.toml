@@ -9,9 +9,18 @@ name = "ssimulacra2_nif"
 crate-type = ["cdylib"]
 
 [dependencies]
-rustler = "0.38.0"
+rustler = { version = "0.38.0", default-features = false, features = ["derive"] }
 fast-ssim2 = { git = "https://github.com/imazen/fast-ssim2", rev = "093aa6f15a0826b20dc94c249c33e14c0a68bf67", features = ["imgref"] }
 enough = "0.4.4"
 almost-enough = "0.4.4"
 imgref = "1"
 bytemuck = "1"
+
+# Required since Rustler 0.30: expose per-NIF-version features so the
+# rustler_precompiled build can select the target NIF version. See
+# https://hexdocs.pm/rustler_precompiled/precompilation_guide.html
+[features]
+default = ["nif_version_2_15"]
+nif_version_2_15 = ["rustler/nif_version_2_15"]
+nif_version_2_16 = ["rustler/nif_version_2_16"]
+nif_version_2_17 = ["rustler/nif_version_2_17"]
