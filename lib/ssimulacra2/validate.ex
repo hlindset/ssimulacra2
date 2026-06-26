@@ -23,7 +23,7 @@ defmodule Ssimulacra2.Validate do
 
   @doc "Returns :ok or {:error, :invalid_cancel}."
   def cancel(nil), do: :ok
-  def cancel(%Ssimulacra2.CancellationToken{}), do: :ok
+  def cancel(%Ssimulacra2.CancelRef{}), do: :ok
   def cancel(_), do: {:error, :invalid_cancel}
 
   @doc "Returns :ok or {:error, :invalid_timeout}."

@@ -27,12 +27,13 @@ defmodule Ssimulacra2 do
   ## Cancellation
 
   `compare/5` and `Ssimulacra2.Reference.compare/3` accept `cancel:` (an
-  `Ssimulacra2.CancellationToken`) and `timeout:` (milliseconds) to abort a
-  long comparison mid-computation, returning `{:error, :cancelled}` or
-  `{:error, :timeout}`. See `Ssimulacra2.CancellationToken`.
+  `Ssimulacra2.CancelRef`) and `timeout:` (milliseconds) to abort a long
+  comparison mid-computation, returning `{:error, :cancelled}` or
+  `{:error, :timeout}`. Create a ref with `Ssimulacra2.CancelRef.new/0` and trip
+  it with `cancel/1`.
   """
 
-  alias Ssimulacra2.{Cancellation, Native, Validate}
+  alias Ssimulacra2.{Cancellation, CancelRef, Native, Validate}
 
   @type image_data :: binary()
   @type reason ::
@@ -57,8 +58,8 @@ defmodule Ssimulacra2 do
 
   ## Cancellation
 
-  Pass `cancel:` an `Ssimulacra2.CancellationToken` to abort the comparison
-  from another process (e.g. on client disconnect) — the call returns
+  Pass `cancel:` an `Ssimulacra2.CancelRef` to abort the comparison from
+  another process (e.g. on client disconnect) — the call returns
   `{:error, :cancelled}`. Pass `timeout:` a positive integer of milliseconds to
   bound the wall-clock time — the call returns `{:error, :timeout}` if it
   exceeds that. Both may be combined; cancellation is checked at strip
@@ -98,4 +99,13 @@ defmodule Ssimulacra2 do
     end
   end
 
+  @doc """
+  Trip an `Ssimulacra2.CancelRef`, aborting any comparison that uses it.
+
+  Call from any process to cancel an in-flight `compare/5` or
+  `Ssimulacra2.Reference.compare/3` that was passed this ref as `cancel:`.
+  Returns `:ok` and is safe to call more than once.
+  """
+  @spec cancel(CancelRef.t()) :: :ok
+  def cancel(%CancelRef{resource: r}), do: Native.token_cancel(r)
 end

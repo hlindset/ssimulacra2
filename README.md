@@ -56,33 +56,33 @@ If `:vix` is a dependency, pass images directly:
 ### Cancellation & timeouts
 
 `compare/5` and `Reference.compare/3` can be aborted mid-computation. The metric
-runs on a dirty scheduler and polls a cancellation token at strip boundaries, so
-the CPU is freed promptly.
+runs on a dirty scheduler and polls a cancel ref at strip boundaries, so the CPU
+is freed promptly.
 
 ```elixir
 # Wall-clock timeout — returns {:error, :timeout} if it overruns.
 Ssimulacra2.compare(ref, dist, w, h, timeout: 3_000)
 
-# External cancellation — the token is tripped from another process, because the
+# External cancellation — the ref is tripped from another process, because the
 # calling process is blocked in the NIF until it returns.
-tok = Ssimulacra2.CancellationToken.new()
+tok = Ssimulacra2.CancelRef.new()
 task = Task.async(fn -> Ssimulacra2.compare(ref, dist, w, h, cancel: tok) end)
 # ... on client disconnect / shutdown:
-Ssimulacra2.CancellationToken.cancel(tok)
+Ssimulacra2.cancel(tok)
 Task.await(task)  #=> {:error, :cancelled}
 ```
 
-A quality-search loop can share one token across probes for an overall deadline
+A quality-search loop can share one ref across probes for an overall deadline
 (or disconnect). Tripping it aborts the in-flight probe and makes every later
 probe return `{:error, :cancelled}` at once:
 
 ```elixir
 {:ok, ref} = Ssimulacra2.Reference.new(original, w, h)
-tok = Ssimulacra2.CancellationToken.new()
+tok = Ssimulacra2.CancelRef.new()
 
-# Watchdog trips the shared token on the search deadline (a disconnect monitor
-# can call cancel/1 too).
-spawn(fn -> Process.sleep(5_000); Ssimulacra2.CancellationToken.cancel(tok) end)
+# Watchdog trips the shared ref on the search deadline (a disconnect monitor
+# can call Ssimulacra2.cancel/1 too).
+spawn(fn -> Process.sleep(5_000); Ssimulacra2.cancel(tok) end)
 
 case Ssimulacra2.Reference.compare(ref, candidate, cancel: tok) do
   {:ok, score}         -> score
@@ -90,7 +90,7 @@ case Ssimulacra2.Reference.compare(ref, candidate, cancel: tok) do
 end
 ```
 
-A token is single-use: once cancelled it stays cancelled.
+A cancel ref is single-use: once cancelled it stays cancelled.
 
 ## Accuracy
 

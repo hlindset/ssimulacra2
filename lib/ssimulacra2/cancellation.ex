@@ -2,12 +2,12 @@ defmodule Ssimulacra2.Cancellation do
   @moduledoc false
   # Shared cancellation/timeout orchestration for compare and Reference.compare.
 
-  alias Ssimulacra2.CancellationToken
+  alias Ssimulacra2.CancelRef
 
-  # `invoke` is a 1-arity fun taking the token resource (or nil) and returning
+  # `invoke` is a 1-arity fun taking the ref resource (or nil) and returning
   # the raw native result: {:ok, score} | {:error, :cancelled}
   #                                       | {:error, {:failed, msg}}.
-  @spec run(CancellationToken.t() | nil, pos_integer() | nil, (reference() | nil -> term())) ::
+  @spec run(CancelRef.t() | nil, pos_integer() | nil, (reference() | nil -> term())) ::
           {:ok, float()}
           | {:error, :cancelled | :timeout | {:ssimulacra2, String.t()}}
   def run(cancel, nil, invoke) do
@@ -16,7 +16,7 @@ defmodule Ssimulacra2.Cancellation do
   end
 
   def run(cancel, timeout, invoke) when is_integer(timeout) and timeout > 0 do
-    token = cancel || CancellationToken.new()
+    ref = cancel || CancelRef.new()
     parent = self()
     tag = make_ref()
 
@@ -33,12 +33,12 @@ defmodule Ssimulacra2.Cancellation do
           {:DOWN, ^parent_ref, :process, ^parent, _} -> :ok
         after
           timeout ->
-            CancellationToken.cancel(token)
+            Ssimulacra2.cancel(ref)
             send(parent, {:status, tag, :timed_out})
         end
       end)
 
-    result = invoke.(token.resource)
+    result = invoke.(ref.resource)
     send(canceller, {:done, tag})
 
     status =
@@ -51,7 +51,7 @@ defmodule Ssimulacra2.Cancellation do
     map_result(result, status)
   end
 
-  defp token_resource(%CancellationToken{resource: r}), do: r
+  defp token_resource(%CancelRef{resource: r}), do: r
   defp token_resource(nil), do: nil
 
   defp map_result({:ok, score}, _status), do: {:ok, score}

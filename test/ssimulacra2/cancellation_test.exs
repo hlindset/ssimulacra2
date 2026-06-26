@@ -3,37 +3,37 @@ defmodule Ssimulacra2.CancellationTest do
   # wall-clock must dominate the cancel/timer; running them serially keeps dirty
   # schedulers uncontended so timing stays predictable.
   use ExUnit.Case, async: false
-  alias Ssimulacra2.{CancellationToken, Fixtures, Reference}
+  alias Ssimulacra2.{CancelRef, Fixtures, Reference}
 
-  test "compare/5 with a pre-cancelled token returns {:error, :cancelled}" do
+  test "compare/5 with a pre-cancelled ref returns {:error, :cancelled}" do
     img = Fixtures.gradient(512, 512)
-    tok = CancellationToken.new()
-    :ok = CancellationToken.cancel(tok)
+    tok = CancelRef.new()
+    :ok = Ssimulacra2.cancel(tok)
     assert {:error, :cancelled} = Ssimulacra2.compare(img, img, 512, 512, cancel: tok)
   end
 
-  test "Reference.compare/3 with a pre-cancelled token returns {:error, :cancelled}" do
+  test "Reference.compare/3 with a pre-cancelled ref returns {:error, :cancelled}" do
     img = Fixtures.gradient(512, 512)
     {:ok, ref} = Reference.new(img, 512, 512)
-    tok = CancellationToken.new()
-    :ok = CancellationToken.cancel(tok)
+    tok = CancelRef.new()
+    :ok = Ssimulacra2.cancel(tok)
     assert {:error, :cancelled} = Reference.compare(ref, img, cancel: tok)
   end
 
-  test "a live token does not affect the result" do
+  test "a live ref does not affect the result" do
     a = Fixtures.gradient(64, 64)
     b = Fixtures.solid(64, 64, {200, 100, 50})
-    tok = CancellationToken.new()
+    tok = CancelRef.new()
     {:ok, plain} = Ssimulacra2.compare(a, b, 64, 64)
     {:ok, with_tok} = Ssimulacra2.compare(a, b, 64, 64, cancel: tok)
     assert_in_delta plain, with_tok, 1.0e-9
   end
 
-  test "a live token does not affect Reference.compare" do
+  test "a live ref does not affect Reference.compare" do
     a = Fixtures.gradient(64, 64)
     b = Fixtures.solid(64, 64, {200, 100, 50})
     {:ok, ref} = Reference.new(a, 64, 64)
-    tok = CancellationToken.new()
+    tok = CancelRef.new()
     {:ok, plain} = Reference.compare(ref, b)
     {:ok, with_tok} = Reference.compare(ref, b, cancel: tok)
     assert_in_delta plain, with_tok, 1.0e-9
@@ -47,7 +47,7 @@ defmodule Ssimulacra2.CancellationTest do
     # Baseline: how long a full (uncancelled) compare of this image takes.
     {full_us, {:ok, _}} = :timer.tc(fn -> Ssimulacra2.compare(big, big, 3000, 3000) end)
 
-    tok = CancellationToken.new()
+    tok = CancelRef.new()
     parent = self()
 
     task =
@@ -58,7 +58,7 @@ defmodule Ssimulacra2.CancellationTest do
 
     assert_receive :started, 1000
     Process.sleep(10)
-    CancellationToken.cancel(tok)
+    Ssimulacra2.cancel(tok)
 
     {abort_us, result} = :timer.tc(fn -> Task.await(task, 30_000) end)
     assert {:error, :cancelled} = result
@@ -71,7 +71,7 @@ defmodule Ssimulacra2.CancellationTest do
   test "cancelling from another process aborts an in-flight Reference.compare" do
     big = Fixtures.solid(3000, 3000, {123, 50, 200})
     {:ok, ref} = Reference.new(big, 3000, 3000)
-    tok = CancellationToken.new()
+    tok = CancelRef.new()
     parent = self()
 
     task =
@@ -82,34 +82,34 @@ defmodule Ssimulacra2.CancellationTest do
 
     assert_receive :started, 1000
     Process.sleep(10)
-    CancellationToken.cancel(tok)
+    Ssimulacra2.cancel(tok)
 
     assert {:error, :cancelled} = Task.await(task, 30_000)
   end
 
-  test "a cancelled token aborts every subsequent comparison" do
+  test "a cancelled ref aborts every subsequent comparison" do
     a = Fixtures.gradient(64, 64)
     b = Fixtures.solid(64, 64, {200, 100, 50})
-    tok = CancellationToken.new()
-    :ok = CancellationToken.cancel(tok)
+    tok = CancelRef.new()
+    :ok = Ssimulacra2.cancel(tok)
 
-    # One token covers a whole batch: once tripped, all later compares abort.
+    # One ref covers a whole batch: once tripped, all later compares abort.
     assert {:error, :cancelled} = Ssimulacra2.compare(a, b, 64, 64, cancel: tok)
     assert {:error, :cancelled} = Ssimulacra2.compare(a, b, 64, 64, cancel: tok)
   end
 
   test "compare!/5 raises on cancellation" do
     img = Fixtures.gradient(256, 256)
-    tok = CancellationToken.new()
-    :ok = CancellationToken.cancel(tok)
+    tok = CancelRef.new()
+    :ok = Ssimulacra2.cancel(tok)
     assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(img, img, 256, 256, cancel: tok) end
   end
 
   test "Reference.compare!/3 raises on cancellation" do
     img = Fixtures.gradient(256, 256)
     {:ok, ref} = Reference.new(img, 256, 256)
-    tok = CancellationToken.new()
-    :ok = CancellationToken.cancel(tok)
+    tok = CancelRef.new()
+    :ok = Ssimulacra2.cancel(tok)
     assert_raise Ssimulacra2.Error, fn -> Reference.compare!(ref, img, cancel: tok) end
   end
 
@@ -141,7 +141,7 @@ defmodule Ssimulacra2.CancellationTest do
 
   test "external cancel during a timed call is reported as :cancelled, not :timeout" do
     big = Fixtures.solid(3000, 3000, {1, 2, 3})
-    tok = CancellationToken.new()
+    tok = CancelRef.new()
     parent = self()
 
     task =
@@ -152,7 +152,7 @@ defmodule Ssimulacra2.CancellationTest do
 
     assert_receive :started, 1000
     Process.sleep(10)
-    CancellationToken.cancel(tok)
+    Ssimulacra2.cancel(tok)
 
     assert {:error, :cancelled} = Task.await(task, 30_000)
   end

@@ -40,7 +40,7 @@ defmodule Ssimulacra2.Reference do
   Compare a candidate against the precomputed reference (same format as the
   reference).
 
-  Accepts `cancel:` (an `Ssimulacra2.CancellationToken`) and `timeout:`
+  Accepts `cancel:` (an `Ssimulacra2.CancelRef`) and `timeout:`
   (milliseconds) to abort an in-flight comparison; see `Ssimulacra2.compare/5`.
   Returns `{:error, :cancelled}` or `{:error, :timeout}` respectively.
   """

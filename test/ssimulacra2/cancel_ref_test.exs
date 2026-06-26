@@ -1,4 +1,4 @@
-defmodule Ssimulacra2.CancellationTokenNativeTest do
+defmodule Ssimulacra2.CancelRefNativeTest do
   use ExUnit.Case, async: true
   alias Ssimulacra2.Native
 
@@ -13,18 +13,18 @@ defmodule Ssimulacra2.CancellationTokenNativeTest do
   end
 end
 
-defmodule Ssimulacra2.CancellationTokenTest do
+defmodule Ssimulacra2.CancelRefTest do
   use ExUnit.Case, async: true
-  alias Ssimulacra2.CancellationToken
+  alias Ssimulacra2.CancelRef
 
   test "new/0 returns a struct wrapping a resource" do
-    tok = CancellationToken.new()
-    assert %CancellationToken{resource: r} = tok
+    tok = CancelRef.new()
+    assert %CancelRef{resource: r} = tok
     assert is_reference(r)
   end
 
-  test "cancel/1 returns :ok" do
-    tok = CancellationToken.new()
-    assert :ok = CancellationToken.cancel(tok)
+  test "Ssimulacra2.cancel/1 returns :ok" do
+    tok = CancelRef.new()
+    assert :ok = Ssimulacra2.cancel(tok)
   end
 end
