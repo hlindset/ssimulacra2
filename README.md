@@ -117,6 +117,10 @@ precompiled artifact — i.e. on a target not covered by the release matrix, or
 when forcing a build with `SSIMULACRA2_BUILD=1`. In that case `fast-ssim2`
 requires **Rust ≥ 1.89** (the crate pins that MSRV).
 
+## LLM Development Notice
+
+This library was developed with help from LLMs.
+
 ## License
 
 This wrapper is released under BSD-2-Clause, matching `fast-ssim2`.
