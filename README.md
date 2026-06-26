@@ -100,7 +100,8 @@ A cancel ref is single-use: once cancelled it stays cancelled.
 ## Releasing
 
 Precompiled NIFs are built by the GitHub release workflow on a `v*` tag. See
-[RELEASING.md](RELEASING.md) for the full publish checklist.
+[RELEASING.md](https://github.com/hlindset/ssimulacra2/blob/main/RELEASING.md)
+for the full publish checklist.
 
 ### Building from source
 

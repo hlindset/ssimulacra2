@@ -30,7 +30,7 @@ defmodule Ssimulacra2.MixProject do
   defp docs do
     [
       main: "readme",
-      extras: ["README.md"]
+      extras: ["README.md", "CHANGELOG.md"]
     ]
   end
 
@@ -42,7 +42,8 @@ defmodule Ssimulacra2.MixProject do
         "fast-ssim2" => "https://github.com/imazen/fast-ssim2"
       },
       files: ~w(lib native/ssimulacra2_nif/src native/ssimulacra2_nif/Cargo.toml
-                native/ssimulacra2_nif/Cargo.lock mix.exs README.md checksum-*.exs)
+                native/ssimulacra2_nif/Cargo.lock mix.exs README.md CHANGELOG.md
+                checksum-*.exs)
     ]
   end
 

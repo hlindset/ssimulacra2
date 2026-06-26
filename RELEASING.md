@@ -83,8 +83,8 @@ able to load the NIF.
    ```
 
    Review the printed file list — confirm `checksum-*.exs`,
-   `native/ssimulacra2_nif/Cargo.lock`, `lib`, and `README.md` are all included
-   — then confirm. Docs are built and pushed automatically (`ex_doc`).
+   `native/ssimulacra2_nif/Cargo.lock`, `lib`, `README.md`, and `CHANGELOG.md`
+   are all included — then confirm. Docs are built and pushed automatically (`ex_doc`).
 
 9. **Verify the release:** check the package page on hex.pm and that
    `mix deps.get` in a fresh project pulls a precompiled binary without invoking
