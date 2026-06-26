@@ -23,9 +23,17 @@ defmodule Ssimulacra2 do
   (`u16`, `f32`) are **native-endian** — e.g. `<<v::native-16>>` /
   `<<v::native-float-32>>`. A binary's size must equal
   `width * height * channels * bytes_per_element` for its format.
+
+  ## Cancellation
+
+  `compare/5` and `Ssimulacra2.Reference.compare/3` accept `cancel:` (an
+  `Ssimulacra2.CancelRef`) and `timeout:` (milliseconds) to abort a long
+  comparison mid-computation, returning `{:error, :cancelled}` or
+  `{:error, :timeout}`. Create a ref with `Ssimulacra2.CancelRef.new/0` and trip
+  it with `cancel/1`.
   """
 
-  alias Ssimulacra2.{Native, Validate}
+  alias Ssimulacra2.{Cancellation, CancelRef, Native, Validate}
 
   @type image_data :: binary()
   @type reason ::
@@ -33,6 +41,10 @@ defmodule Ssimulacra2 do
           | :size_mismatch
           | :dimension_mismatch
           | :unknown_format
+          | :invalid_cancel
+          | :invalid_timeout
+          | :cancelled
+          | :timeout
           | {:ssimulacra2, String.t()}
 
   @doc """
@@ -43,19 +55,35 @@ defmodule Ssimulacra2 do
   formats are `:rgb16`, `:linear_rgb`, `:gray8`, and `:linear_gray`.
 
   Returns `{:ok, score}` or `{:error, reason}`.
+
+  ## Cancellation
+
+  Pass `cancel:` an `Ssimulacra2.CancelRef` to abort the comparison from
+  another process (e.g. on client disconnect) — the call returns
+  `{:error, :cancelled}`. Pass `timeout:` a positive integer of milliseconds to
+  bound the wall-clock time — the call returns `{:error, :timeout}` if it
+  exceeds that. Both may be combined; cancellation is checked at strip
+  boundaries, so the CPU is freed promptly without leaving the dirty scheduler.
+
+  Invalid options return `{:error, :invalid_cancel}` / `{:error, :invalid_timeout}`.
   """
   @spec compare(image_data(), image_data(), pos_integer(), pos_integer(), keyword()) ::
           {:ok, float()} | {:error, reason()}
   def compare(reference, distorted, width, height, opts \\ [])
       when is_binary(reference) and is_binary(distorted) do
     format = Keyword.get(opts, :format, :rgb888)
+    cancel = Keyword.get(opts, :cancel)
+    timeout = Keyword.get(opts, :timeout)
 
     with :ok <- Validate.format(format),
          :ok <- Validate.dims(width, height),
          :ok <- Validate.size(reference, width, height, format),
-         :ok <- Validate.size(distorted, width, height, format) do
-      Native.compare(reference, distorted, width, height, format)
-      |> map_native_error()
+         :ok <- Validate.size(distorted, width, height, format),
+         :ok <- Validate.cancel(cancel),
+         :ok <- Validate.timeout(timeout) do
+      Cancellation.run(cancel, timeout, fn resource ->
+        Native.compare(reference, distorted, width, height, format, resource)
+      end)
     end
   end
 
@@ -71,6 +99,13 @@ defmodule Ssimulacra2 do
     end
   end
 
-  defp map_native_error({:ok, score}), do: {:ok, score}
-  defp map_native_error({:error, message}), do: {:error, {:ssimulacra2, message}}
+  @doc """
+  Trip an `Ssimulacra2.CancelRef`, aborting any comparison that uses it.
+
+  Call from any process to cancel an in-flight `compare/5` or
+  `Ssimulacra2.Reference.compare/3` that was passed this ref as `cancel:`.
+  Returns `:ok` and is safe to call more than once.
+  """
+  @spec cancel(CancelRef.t()) :: :ok
+  def cancel(%CancelRef{resource: r}), do: Native.token_cancel(r)
 end
