@@ -64,7 +64,16 @@ able to load the NIF.
    tarballs to the GitHub Release. Confirm **every matrix job succeeded** and the
    artifacts are on the release before continuing.
 
-7. **Generate the checksum file** (downloads and hashes every artifact):
+7. **Set the GitHub release notes from the CHANGELOG.** The upload action
+   creates the release with no description; populate it with this version's
+   section so the release page mirrors the changelog:
+
+   ```bash
+   awk '/^## \[<version>\]/{f=1;next} /^## \[/{f=0} /^\[[^]]*\]:/{f=0} f' \
+     CHANGELOG.md | gh release edit v<version> --notes-file -
+   ```
+
+8. **Generate the checksum file** (downloads and hashes every artifact):
 
    ```bash
    mise exec -- mix rustler_precompiled.download Ssimulacra2.Native --all --print
@@ -76,7 +85,7 @@ able to load the NIF.
    artifact, not committed to git; it just needs to exist locally when you
    publish.)
 
-8. **Publish to Hex:**
+9. **Publish to Hex:**
 
    ```bash
    mise exec -- mix hex.publish
@@ -86,7 +95,7 @@ able to load the NIF.
    `native/ssimulacra2_nif/Cargo.lock`, `lib`, `README.md`, and `CHANGELOG.md`
    are all included — then confirm. Docs are built and pushed automatically (`ex_doc`).
 
-9. **Verify the release:** check the package page on hex.pm and that
+10. **Verify the release:** check the package page on hex.pm and that
    `mix deps.get` in a fresh project pulls a precompiled binary without invoking
    a Rust toolchain.
 
