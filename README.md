@@ -5,6 +5,11 @@ SSIMULACRA2 perceptual image-quality metric for Elixir, backed by the
 via Rustler. Published with precompiled NIFs, so the Rust toolchain is not
 required if you're on a covered architecture + platform.
 
+> **Note:** this binding currently pins `fast-ssim2` to a git revision
+> because the cooperative-cancellation API (`*_with_stop`) has not yet landed
+> in a crates.io release. We will switch to a proper versioned dependency as
+> soon as possible.
+
 ## Installation
 
 ```elixir
