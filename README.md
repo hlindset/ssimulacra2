@@ -60,7 +60,7 @@ If `:vix` is a dependency, pass images directly:
 
 ### Cancellation & timeouts
 
-`compare/5` and `Reference.compare/3` can be aborted mid-computation. The metric
+`Ssimulacra2.compare/5` and `Ssimulacra2.Reference.compare/3` can be aborted mid-computation. The metric
 runs on a dirty scheduler and polls a cancel ref at strip boundaries, so the CPU
 is freed promptly.
 
@@ -96,23 +96,6 @@ end
 ```
 
 A cancel ref is single-use: once cancelled it stays cancelled.
-
-## Accuracy
-
-Scores come from [`fast-ssim2`](https://github.com/imazen/fast-ssim2), a maintained
-SIMD implementation of SSIMULACRA2. This library has **not** been bit-exactly
-validated against the canonical Cloudinary/libjxl reference, so treat the absolute
-value as "SSIMULACRA2 as computed by `fast-ssim2`" rather than guaranteed parity
-with that reference. The metric is well-behaved and monotonic (identical images
-score 100; perceptual degradation lowers the score, into the negatives for large
-differences), which is what matters for relative use such as a quality-search loop.
-If you need a specific target score, calibrate the threshold against this
-implementation rather than against externally published numbers.
-
-## Status
-
-v0.1 supports 8-bit sRGB, 16-bit sRGB, linear-f32, and grayscale input for the
-SSIMULACRA2 metric.
 
 ## Releasing
 

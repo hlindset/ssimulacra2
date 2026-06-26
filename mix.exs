@@ -12,7 +12,8 @@ defmodule Ssimulacra2.MixProject do
       description: "SSIMULACRA2 perceptual image-quality metric for Elixir (fast-ssim2 NIF)",
       package: package(),
       name: "Ssimulacra2",
-      source_url: "https://github.com/hlindset/ssimulacra2"
+      source_url: "https://github.com/hlindset/ssimulacra2",
+      docs: docs()
     ]
   end
 
@@ -25,6 +26,13 @@ defmodule Ssimulacra2.MixProject do
 
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md"]
+    ]
+  end
 
   defp package do
     [
