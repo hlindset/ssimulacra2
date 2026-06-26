@@ -42,8 +42,8 @@ defmodule Ssimulacra2.MixProject do
         "fast-ssim2" => "https://github.com/imazen/fast-ssim2"
       },
       files: ~w(lib native/ssimulacra2_nif/src native/ssimulacra2_nif/Cargo.toml
-                native/ssimulacra2_nif/Cargo.lock mix.exs README.md CHANGELOG.md
-                checksum-*.exs)
+                native/ssimulacra2_nif/Cargo.lock native/ssimulacra2_nif/.cargo/config.toml
+                mix.exs README.md CHANGELOG.md checksum-*.exs)
     ]
   end
 
