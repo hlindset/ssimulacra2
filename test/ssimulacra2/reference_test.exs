@@ -50,11 +50,9 @@ defmodule Ssimulacra2.ReferenceTest do
   @parity_cases [
     {:rgb16, Fixtures.gradient_rgb16(64, 64),
      Fixtures.solid_rgb16(64, 64, {40_000, 20_000, 10_000})},
-    {:linear_rgb, Fixtures.gradient_linear_rgb(64, 64),
-     Fixtures.solid_linear_rgb(64, 64, 0.5)},
+    {:linear_rgb, Fixtures.gradient_linear_rgb(64, 64), Fixtures.solid_linear_rgb(64, 64, 0.5)},
     {:gray8, Fixtures.gradient_gray8(64, 64), Fixtures.solid_gray8(64, 64, 128)},
-    {:linear_gray, Fixtures.gradient_linear_gray(64, 64),
-     Fixtures.solid_linear_gray(64, 64, 0.5)}
+    {:linear_gray, Fixtures.gradient_linear_gray(64, 64), Fixtures.solid_linear_gray(64, 64, 0.5)}
   ]
 
   for {fmt, ref_img, cand} <- @parity_cases do

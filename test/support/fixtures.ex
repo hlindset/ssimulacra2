@@ -29,8 +29,8 @@ defmodule Ssimulacra2.Fixtures do
   @doc "A deterministic linear-RGB f32 gradient in [0,1] (native-endian, w*h*12 bytes)."
   def gradient_linear_rgb(width, height) do
     for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
-      <<(rem(x, 256) / 255)::native-float-32, (rem(y, 256) / 255)::native-float-32,
-        (rem(x + y, 256) / 255)::native-float-32>>
+      <<rem(x, 256) / 255::native-float-32, rem(y, 256) / 255::native-float-32,
+        rem(x + y, 256) / 255::native-float-32>>
     end
   end
 
@@ -54,7 +54,7 @@ defmodule Ssimulacra2.Fixtures do
   @doc "A deterministic linear grayscale f32 gradient in [0,1] (w*h*4 bytes)."
   def gradient_linear_gray(width, height) do
     for y <- 0..(height - 1), x <- 0..(width - 1), into: <<>> do
-      <<(rem(x + y, 256) / 255)::native-float-32>>
+      <<rem(x + y, 256) / 255::native-float-32>>
     end
   end
 

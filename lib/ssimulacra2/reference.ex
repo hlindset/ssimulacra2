@@ -54,7 +54,14 @@ defmodule Ssimulacra2.Reference do
          :ok <- Validate.cancel(cancel),
          :ok <- Validate.timeout(timeout) do
       Cancellation.run(cancel, timeout, fn resource ->
-        Native.reference_compare(ref.resource, distorted, ref.width, ref.height, ref.format, resource)
+        Native.reference_compare(
+          ref.resource,
+          distorted,
+          ref.width,
+          ref.height,
+          ref.format,
+          resource
+        )
       end)
     end
   end
@@ -78,5 +85,7 @@ defmodule Ssimulacra2.Reference do
   end
 
   defp map_native({:ok, value}), do: {:ok, value}
-  defp map_native({:error, message}) when is_binary(message), do: {:error, {:ssimulacra2, message}}
+
+  defp map_native({:error, message}) when is_binary(message),
+    do: {:error, {:ssimulacra2, message}}
 end

@@ -102,7 +102,10 @@ defmodule Ssimulacra2.CancellationTest do
     img = Fixtures.gradient(256, 256)
     tok = CancelRef.new()
     :ok = Ssimulacra2.cancel(tok)
-    assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(img, img, 256, 256, cancel: tok) end
+
+    assert_raise Ssimulacra2.Error, fn ->
+      Ssimulacra2.compare!(img, img, 256, 256, cancel: tok)
+    end
   end
 
   test "Reference.compare!/3 raises on cancellation" do
@@ -159,7 +162,10 @@ defmodule Ssimulacra2.CancellationTest do
 
   test "compare!/5 raises on timeout" do
     big = Fixtures.solid(2500, 2500, {10, 20, 30})
-    assert_raise Ssimulacra2.Error, fn -> Ssimulacra2.compare!(big, big, 2500, 2500, timeout: 1) end
+
+    assert_raise Ssimulacra2.Error, fn ->
+      Ssimulacra2.compare!(big, big, 2500, 2500, timeout: 1)
+    end
   end
 
   test "an invalid :timeout value is rejected" do
