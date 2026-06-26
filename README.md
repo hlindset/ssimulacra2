@@ -99,16 +99,8 @@ A cancel ref is single-use: once cancelled it stays cancelled.
 
 ## Releasing
 
-Precompiled NIFs are built by the GitHub release workflow on a `v*` tag. Before
-`mix hex.publish`, generate the checksum file the package references:
-
-```bash
-mix rustler_precompiled.download Ssimulacra2.Native --all --print
-```
-
-This writes `checksum-Elixir.Ssimulacra2.Native.exs`, which MUST be included in
-the published package (it is already listed in `mix.exs` `:files`). Without it,
-precompiled NIF loading fails for consumers.
+Precompiled NIFs are built by the GitHub release workflow on a `v*` tag. See
+[RELEASING.md](RELEASING.md) for the full publish checklist.
 
 ### Building from source
 
