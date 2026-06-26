@@ -14,8 +14,8 @@ jobs:
       matrix:
         nif: ["2.17", "2.16", "2.15"]
         job:
-          - { target: aarch64-apple-darwin, os: macos-14 }
-          - { target: x86_64-apple-darwin, os: macos-13 }
+          - { target: aarch64-apple-darwin, os: macos-15 }
+          - { target: x86_64-apple-darwin, os: macos-15 }
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-22.04 }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-22.04, use-cross: true }
           - { target: x86_64-unknown-linux-musl, os: ubuntu-22.04, use-cross: true }
@@ -31,6 +31,13 @@ jobs:
         id: meta
         shell: bash
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      # macos-15 runners are Apple Silicon (arm64). The aarch64 target builds
+      # natively; x86_64-apple-darwin is cross-compiled and its target std is
+      # not preinstalled, so add it before building.
+      - name: Add Rust target for cross-compiled macOS build
+        if: matrix.job.target == 'x86_64-apple-darwin'
+        run: rustup target add x86_64-apple-darwin
 
       - name: Build NIF
         id: build
