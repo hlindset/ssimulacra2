@@ -1,16 +1,15 @@
 use almost_enough::SyncStopper;
 use enough::{Stop, Unstoppable};
 use fast_ssim2::{
-    compute_ssimulacra2_strip_with_stop, compute_ssimulacra2_with_stop, Ssimulacra2Error,
-    Ssimulacra2Reference, ToLinearRgb,
+    compute_ssimulacra2_with_config, PixelDescriptor, PixelSlice, Ssimulacra2Config,
+    Ssimulacra2Error, Ssimulacra2Reference,
 };
-use imgref::{ImgRef, ImgVec};
 use rustler::{Atom, Binary, ResourceArc};
 
 /// Rows per cancellation-check boundary at scale 0. 256 is upstream's
 /// documented memory sweet spot (~bounded peak working set at 40 MP) and
 /// gives ~150 ms cancellation latency at scale 0 on a 36 MP image.
-const STRIP_HEIGHT: u32 = 256;
+const STRIP_HEIGHT: usize = 256;
 
 #[derive(rustler::NifTaggedEnum)]
 enum CompareError {
@@ -90,87 +89,85 @@ impl Format {
     }
 }
 
-// Per-format builders. 8-bit element types (align 1) borrow the binary
-// directly. Multi-byte element types are copied into an owned, aligned Vec
-// via from_ne_bytes: BEAM (sub-)binaries are not guaranteed to be 2-/4-byte
-// aligned, and bytemuck::cast_slice would panic on a misaligned slice.
+impl Format {
+    fn descriptor(&self) -> PixelDescriptor {
+        match self {
+            Format::Rgb888 => PixelDescriptor::RGB8_SRGB,
+            Format::Rgb16 => PixelDescriptor::RGB16_SRGB,
+            Format::LinearRgb => PixelDescriptor::RGBF32_LINEAR,
+            Format::Gray8 => PixelDescriptor::GRAY8_SRGB,
+            Format::LinearGray => PixelDescriptor::GRAYF32_LINEAR,
+        }
+    }
 
-fn rgb888(b: &[u8], w: usize, h: usize) -> ImgRef<'_, [u8; 3]> {
-    ImgRef::new(bytemuck::cast_slice(b), w, h)
+    fn bytes_per_pixel(&self) -> usize {
+        match self {
+            Format::Rgb888 => 3,
+            Format::Rgb16 => 6,
+            Format::LinearRgb => 12,
+            Format::Gray8 => 1,
+            Format::LinearGray => 4,
+        }
+    }
 }
 
-fn gray8(b: &[u8], w: usize, h: usize) -> ImgRef<'_, u8> {
-    ImgRef::new(b, w, h)
+// Pixel bytes as fast-ssim2 can read them. PixelSlice requires the data to be
+// aligned for the sample type, but BEAM (sub-)binaries are not guaranteed to be
+// 2-/4-byte aligned. Aligned binaries (the common case) are borrowed as-is; a
+// misaligned one is copied into a u32-backed buffer, which is aligned for every
+// sample type we accept.
+enum Pixels<'a> {
+    Borrowed(&'a [u8]),
+    Copied(Vec<u32>, usize),
 }
 
-fn rgb16(b: &[u8], w: usize, h: usize) -> ImgVec<[u16; 3]> {
-    let px: Vec<[u16; 3]> = b
-        .chunks_exact(6)
-        .map(|c| {
-            [
-                u16::from_ne_bytes([c[0], c[1]]),
-                u16::from_ne_bytes([c[2], c[3]]),
-                u16::from_ne_bytes([c[4], c[5]]),
-            ]
-        })
-        .collect();
-    ImgVec::new(px, w, h)
+impl<'a> Pixels<'a> {
+    fn new(b: &'a [u8], format: &Format) -> Self {
+        let align = match format {
+            Format::Rgb888 | Format::Gray8 => 1,
+            Format::Rgb16 => 2,
+            Format::LinearRgb | Format::LinearGray => 4,
+        };
+        if (b.as_ptr() as usize).is_multiple_of(align) {
+            Pixels::Borrowed(b)
+        } else {
+            let mut buf = vec![0u32; b.len().div_ceil(4)];
+            bytemuck::cast_slice_mut::<u32, u8>(&mut buf)[..b.len()].copy_from_slice(b);
+            Pixels::Copied(buf, b.len())
+        }
+    }
+
+    fn bytes(&self) -> &[u8] {
+        match self {
+            Pixels::Borrowed(b) => b,
+            Pixels::Copied(buf, len) => &bytemuck::cast_slice(buf)[..*len],
+        }
+    }
+
+    fn slice(&self, w: usize, h: usize, format: &Format) -> Result<PixelSlice<'_>, String> {
+        let stride = w * format.bytes_per_pixel();
+        PixelSlice::new(
+            self.bytes(),
+            w as u32,
+            h as u32,
+            stride,
+            format.descriptor(),
+        )
+        .map_err(|e| e.to_string())
+    }
 }
 
-fn linear_rgb(b: &[u8], w: usize, h: usize) -> ImgVec<[f32; 3]> {
-    let px: Vec<[f32; 3]> = b
-        .chunks_exact(12)
-        .map(|c| {
-            [
-                f32::from_ne_bytes([c[0], c[1], c[2], c[3]]),
-                f32::from_ne_bytes([c[4], c[5], c[6], c[7]]),
-                f32::from_ne_bytes([c[8], c[9], c[10], c[11]]),
-            ]
-        })
-        .collect();
-    ImgVec::new(px, w, h)
+// Every size takes the strip path (tight per-strip cancellation latency +
+// bounded peak memory); fast-ssim2 reflect-pads sub-8px inputs there itself.
+fn strip_config(stop: &dyn Stop) -> Ssimulacra2Config<'_> {
+    Ssimulacra2Config::strips(STRIP_HEIGHT).with_stop(stop)
 }
 
-fn linear_gray(b: &[u8], w: usize, h: usize) -> ImgVec<f32> {
-    let px: Vec<f32> = b
-        .chunks_exact(4)
-        .map(|c| f32::from_ne_bytes([c[0], c[1], c[2], c[3]]))
-        .collect();
-    ImgVec::new(px, w, h)
-}
-
-// Sub-8px inputs take the non-strip path (which reflect-pads and scores them —
-// preserving the pre-strip behavior); everything else takes the strip path
-// (tight per-strip cancellation latency + bounded peak memory). Both are
-// cancellable.
-fn score<S: ToLinearRgb, D: ToLinearRgb>(
-    s: S,
-    d: D,
-    width: usize,
-    height: usize,
-    stop: &dyn Stop,
-) -> Result<f64, CompareError> {
-    let result = if width < 8 || height < 8 {
-        compute_ssimulacra2_with_stop(s, d, stop)
-    } else {
-        compute_ssimulacra2_strip_with_stop(s, d, STRIP_HEIGHT, stop)
-    };
-    result.map_err(to_compare_error)
-}
-
-fn ref_score<T: ToLinearRgb>(
-    r: &Ssimulacra2Reference,
-    img: T,
-    width: usize,
-    height: usize,
-    stop: &dyn Stop,
-) -> Result<f64, CompareError> {
-    let result = if width < 8 || height < 8 {
-        r.compare_with_stop(img, stop)
-    } else {
-        r.compare_strip_with_stop(img, STRIP_HEIGHT, stop)
-    };
-    result.map_err(to_compare_error)
+fn stop_of(cancel: &Option<ResourceArc<StopResource>>) -> &dyn Stop {
+    match cancel {
+        Some(res) => &res.stopper,
+        None => &Unstoppable,
+    }
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
@@ -182,29 +179,19 @@ fn compare(
     format: Atom,
     cancel: Option<ResourceArc<StopResource>>,
 ) -> Result<f64, CompareError> {
-    let (r, d, w, h) = (reference.as_slice(), distorted.as_slice(), width, height);
-    let unstoppable = Unstoppable;
-    let stop: &dyn Stop = match &cancel {
-        Some(res) => &res.stopper,
-        None => &unstoppable,
-    };
     let format = Format::from_atom(format).map_err(CompareError::Failed)?;
-    match format {
-        Format::Rgb888 => score(rgb888(r, w, h), rgb888(d, w, h), w, h, stop),
-        Format::Gray8 => score(gray8(r, w, h), gray8(d, w, h), w, h, stop),
-        Format::Rgb16 => {
-            let (a, b) = (rgb16(r, w, h), rgb16(d, w, h));
-            score(a.as_ref(), b.as_ref(), w, h, stop)
-        }
-        Format::LinearRgb => {
-            let (a, b) = (linear_rgb(r, w, h), linear_rgb(d, w, h));
-            score(a.as_ref(), b.as_ref(), w, h, stop)
-        }
-        Format::LinearGray => {
-            let (a, b) = (linear_gray(r, w, h), linear_gray(d, w, h));
-            score(a.as_ref(), b.as_ref(), w, h, stop)
-        }
-    }
+    let (r, d) = (
+        Pixels::new(reference.as_slice(), &format),
+        Pixels::new(distorted.as_slice(), &format),
+    );
+    let r = r
+        .slice(width, height, &format)
+        .map_err(CompareError::Failed)?;
+    let d = d
+        .slice(width, height, &format)
+        .map_err(CompareError::Failed)?;
+    compute_ssimulacra2_with_config(&r, &d, &strip_config(stop_of(&cancel)))
+        .map_err(to_compare_error)
 }
 
 struct ReferenceResource {
@@ -214,11 +201,6 @@ struct ReferenceResource {
 #[rustler::resource_impl]
 impl rustler::Resource for ReferenceResource {}
 
-fn build_reference<S: ToLinearRgb>(src: S) -> Result<ResourceArc<ReferenceResource>, String> {
-    let inner = Ssimulacra2Reference::new(src).map_err(|e| e.to_string())?;
-    Ok(ResourceArc::new(ReferenceResource { inner }))
-}
-
 #[rustler::nif(schedule = "DirtyCpu")]
 fn reference_new(
     source: Binary,
@@ -226,14 +208,11 @@ fn reference_new(
     height: usize,
     format: Atom,
 ) -> Result<ResourceArc<ReferenceResource>, String> {
-    let (s, w, h) = (source.as_slice(), width, height);
-    match Format::from_atom(format)? {
-        Format::Rgb888 => build_reference(rgb888(s, w, h)),
-        Format::Gray8 => build_reference(gray8(s, w, h)),
-        Format::Rgb16 => build_reference(rgb16(s, w, h).as_ref()),
-        Format::LinearRgb => build_reference(linear_rgb(s, w, h).as_ref()),
-        Format::LinearGray => build_reference(linear_gray(s, w, h).as_ref()),
-    }
+    let format = Format::from_atom(format)?;
+    let s = Pixels::new(source.as_slice(), &format);
+    let inner =
+        Ssimulacra2Reference::new(&s.slice(width, height, &format)?).map_err(|e| e.to_string())?;
+    Ok(ResourceArc::new(ReferenceResource { inner }))
 }
 
 #[rustler::nif(schedule = "DirtyCpu")]
@@ -245,21 +224,15 @@ fn reference_compare(
     format: Atom,
     cancel: Option<ResourceArc<StopResource>>,
 ) -> Result<f64, CompareError> {
-    let (d, w, h) = (distorted.as_slice(), width, height);
-    let r = &reference.inner;
-    let unstoppable = Unstoppable;
-    let stop: &dyn Stop = match &cancel {
-        Some(res) => &res.stopper,
-        None => &unstoppable,
-    };
     let format = Format::from_atom(format).map_err(CompareError::Failed)?;
-    match format {
-        Format::Rgb888 => ref_score(r, rgb888(d, w, h), w, h, stop),
-        Format::Gray8 => ref_score(r, gray8(d, w, h), w, h, stop),
-        Format::Rgb16 => ref_score(r, rgb16(d, w, h).as_ref(), w, h, stop),
-        Format::LinearRgb => ref_score(r, linear_rgb(d, w, h).as_ref(), w, h, stop),
-        Format::LinearGray => ref_score(r, linear_gray(d, w, h).as_ref(), w, h, stop),
-    }
+    let d = Pixels::new(distorted.as_slice(), &format);
+    let d = d
+        .slice(width, height, &format)
+        .map_err(CompareError::Failed)?;
+    reference
+        .inner
+        .compare_with_config(&d, &strip_config(stop_of(&cancel)))
+        .map_err(to_compare_error)
 }
 
 rustler::init!("Elixir.Ssimulacra2.Native");
