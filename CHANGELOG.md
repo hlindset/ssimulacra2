@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Precompiled NIFs for NIF version 2.18 (Erlang/OTP 29).
+
 ### Changed
 
 - Bumped `fast-ssim2` from a git revision (0.8.2 + cancellation) to the
