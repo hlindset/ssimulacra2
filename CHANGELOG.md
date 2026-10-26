@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   candidates are converted to linear RGB one strip at a time instead of for
   the whole frame, and aligned `:rgb16`, `:linear_rgb` and `:linear_gray`
   binaries are read in place rather than copied.
+- Require `rustler_precompiled ~> 0.10.1`. Earlier versions fail to download
+  the precompiled NIFs from GitHub Releases with
+  `{:header_too_long, {:max, 10240}}`.
 
 ## [0.1.0] - 2026-06-26
 

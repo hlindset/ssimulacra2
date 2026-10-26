@@ -50,7 +50,7 @@ defmodule Ssimulacra2.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:rustler_precompiled, "~> 0.9"},
+      {:rustler_precompiled, "~> 0.10.1"},
       {:rustler, ">= 0.0.0", optional: true},
       {:vix, "~> 0.31", optional: true},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false}
