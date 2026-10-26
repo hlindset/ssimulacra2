@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Precompiled NIFs for NIF version 2.18 (Erlang/OTP 29).
+
+### Changed
+
+- Bumped `fast-ssim2` from a git revision (0.8.2 + cancellation) to the
+  crates.io release 0.9.0. 0.9 scores through a bit-exact port of the official
+  SSIMULACRA2 implementation, so scores shift slightly: typically 1e-3–1e-2,
+  up to ~0.12 on small grayscale images. Identical images now score exactly
+  100 at every size, and `Ssimulacra2.Reference` scores match one-shot
+  `compare/5` exactly.
+- Lower peak memory per comparison: `:rgb888`, `:rgb16` and `:gray8`
+  candidates are converted to linear RGB one strip at a time instead of for
+  the whole frame, and aligned `:rgb16`, `:linear_rgb` and `:linear_gray`
+  binaries are read in place rather than copied.
+- Require `rustler_precompiled ~> 0.10.1`. Earlier versions fail to download
+  the precompiled NIFs from GitHub Releases with
+  `{:header_too_long, {:max, 10240}}`.
+
 ## [0.1.0] - 2026-06-26
 
 ### Added
